@@ -34,6 +34,12 @@ public class WM_Central {
              Socket socketCliente = servidor.accept();
 
             System.out.println("Nueva conexion recibida desde " + socketCliente.getInetAddress() + ":" + socketCliente.getPort());
+            
+            // Creamos un hilo independiente para atender a este cliente
+            HiloCentral hilo = new HiloCentral(socketCliente);
+
+            // Iniciamos el hilo para que CENTRAL pueda seguir aceptando otros clientes
+            hilo.start();
         }
 
         } catch (IOException e) {
