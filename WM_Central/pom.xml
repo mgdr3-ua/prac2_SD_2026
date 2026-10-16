@@ -25,4 +25,14 @@
         </dependency>
     </dependencies>
 
+    <build>
+        <plugins>
+            <!-- Permite ejecutar el servidor Java desde Maven -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.5.0</version>
+            </plugin>
+        </plugins>
+    </build>
 </project>

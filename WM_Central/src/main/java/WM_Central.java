@@ -1,6 +1,7 @@
-import java.io.IOException;
-import java.net.ServerSocket;
-import java.net.Socket;
+import java.io.IOException; //gestionar errores de entrada o salida
+import java.net.ServerSocket; //crear el servidor que escucha conexiones entrantes en un puerto
+import java.net.Socket; //conexión entre el servidor y un cliente
+import java.sql.SQLException; //gestionar errores relacionados con la base de datos SQLite
 
 public class WM_Central {
 
@@ -24,6 +25,19 @@ public class WM_Central {
         }
 
         System.out.println("Puerto de escucha: " + puerto);
+
+        // Inicializamos SQLite antes de aceptar conexiones de clientes.
+        try {
+            BaseDatos.crearTablaEstaciones();
+            System.out.println("Base de datos SQLite inicializada correctamente.");
+        } catch (SQLException e) {
+    
+            // Si la base de datos falla, mostramos el error.
+            System.err.println("Error al inicializar SQLite: " + e.getMessage());
+
+            // Detenemos el programa para evitar trabajar sin base de datos.
+            return;
+        }
 
         try (ServerSocket servidor = new ServerSocket(puerto)) {
 
