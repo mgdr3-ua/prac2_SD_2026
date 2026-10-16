@@ -16,10 +16,7 @@ public void run() {
 
     try {
         // Mostramos qué cliente está siendo atendido
-        System.out.println("Hilo iniciado para el cliente: "
-                + cliente.getInetAddress()
-                + ":"
-                + cliente.getPort());
+        System.out.println("Hilo iniciado para el cliente: " + cliente.getInetAddress() + ":" + cliente.getPort());
 
         // Creamos el flujo para recibir datos del cliente
         DataInputStream entrada = new DataInputStream(cliente.getInputStream());
@@ -67,7 +64,12 @@ public void run() {
                 salida.flush();
             }   
         } else {
+             // El mensaje no contiene los tres campos esperados
             System.out.println("ERROR: formato de mensaje incorrecto.");
+
+            // Informamos al cliente del error de formato
+            salida.writeUTF("STATUS#ERROR#Formato de mensaje incorrecto");
+            salida.flush();
         }
 
     } catch (IOException e) {

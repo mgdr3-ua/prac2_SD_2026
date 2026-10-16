@@ -18,9 +18,9 @@ public class ClientePrueba {
             DataInputStream entrada =
                     new DataInputStream(socket.getInputStream());
 
-            // Preparamos el mensaje de registro de la estación
-            String mensaje = "REGISTRO#WS-04#River Park";
-
+            // Mensaje válido utilizado para probar el registro de estaciones
+            String mensaje = "REGISTRO#WS-04#River Park";            
+            
             // Enviamos el mensaje a CENTRAL
             salida.writeUTF(mensaje);
             salida.flush();
