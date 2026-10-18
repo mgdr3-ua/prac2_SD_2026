@@ -2,6 +2,9 @@
 import java.net.Socket;
 import java.io.IOException;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+
 public class WM_WS_M{
 
     public static void main(String[] args){ 
@@ -33,7 +36,29 @@ public class WM_WS_M{
         try(Socket socket = new Socket(ipCentral, puertoCentral)){
             
             System.out.println("Conexion establecida con WM_Central.");
-            System.out.println("Servidor: " + ipCentral + ":" + puertoCentral);
+
+            //Creamos los flujos de comunicación:
+            DataOutputStream salida = 
+                new DataOutputStream(socket.getOutputStream());
+
+            DataInputStream entrada = 
+                new DataInputStream(socket.getInputStream());
+
+        
+        //Construimos el mesanje de registro:
+        String ubicacion = "River Park";
+        String mensaje = "REGISTRO#" + idEstacion + "#" + ubicacion;
+
+        //Enviamos el registro a CENTRAL
+        salida.writeUTF(mensaje);
+        salida.flush();
+
+        System.out.println("Mensaje enviado: " + mensaje);
+
+        //REspuesta de la central:
+        String respuesta = entrada.readUTF();
+
+        System.out.println("Respuesta de la Central: " + respuesta);
 
         } catch (IOException e){
 
