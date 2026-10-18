@@ -5,6 +5,8 @@ import java.io.IOException;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 
+import java.net.ServerSocket;
+
 public class WM_WS_M{
 
     public static void main(String[] args){ 
@@ -63,6 +65,29 @@ public class WM_WS_M{
         } catch (IOException e){
 
             System.out.println("ERROR: No se puede conectar con WM_Central.");
+            System.out.println("Motivo: " + e.getMessage());
+        }
+
+        //Iniciamos el servidor TCP del monitor para recibir al Engine
+        try(ServerSocket servidorMonitor = new ServerSocket(puertoMonitor)){
+
+            System.out.println("Servidor del monitor iniciado.");
+            System.out.println("Escuchando en el puerto: " + puertoMonitor);
+            System.out.println("Esperando conexion de WM_WS_M ...");
+
+            //Esperamos hasta que el Engine establezca una conexión 
+            Socket socketEngine = servidorMonitor.accept();
+
+            System.out.println("WM_WS_E conectado desde: "
+                + socketEngine.getInetAddress()
+                + ":" + socketEngine.getPort()
+            );
+
+            //Por ahora cerraremos la conexion de prueba
+            socketEngine.close();
+        } catch(IOException e){
+
+            System.out.println("ERROR en el servidor del monitor.");
             System.out.println("Motivo: " + e.getMessage());
         }
     }
