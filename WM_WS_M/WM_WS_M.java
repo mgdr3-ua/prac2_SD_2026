@@ -1,3 +1,7 @@
+
+import java.net.Socket;
+import java.io.IOException;
+
 public class WM_WS_M{
 
     public static void main(String[] args){ 
@@ -24,5 +28,17 @@ public class WM_WS_M{
         System.out.println("Puerto central: " + puertoCentral);    
 
         System.out.println("Monitor iniciado correctamente!! ");
+
+        //Intentamos conectar WM_Central
+        try(Socket socket = new Socket(ipCentral, puertoCentral)){
+            
+            System.out.println("Conexion establecida con WM_Central.");
+            System.out.println("Servidor: " + ipCentral + ":" + puertoCentral);
+
+        } catch (IOException e){
+
+            System.out.println("ERROR: No se puede conectar con WM_Central.");
+            System.out.println("Motivo: " + e.getMessage());
+        }
     }
 }
