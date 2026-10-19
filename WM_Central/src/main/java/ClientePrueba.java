@@ -11,15 +11,13 @@ public class ClientePrueba {
         try (Socket socket = new Socket("localhost", 5000)) {
 
             // Creamos el flujo para enviar datos al servidor
-            DataOutputStream salida =
-                    new DataOutputStream(socket.getOutputStream());
+            DataOutputStream salida = new DataOutputStream(socket.getOutputStream());
 
             // Creamos el flujo para recibir respuestas del servidor
-            DataInputStream entrada =
-                    new DataInputStream(socket.getInputStream());
+            DataInputStream entrada = new DataInputStream(socket.getInputStream());
 
-            // Mensaje válido utilizado para probar el registro de estaciones
-            String mensaje = "REGISTRO#WS-04#River Park";            
+            // Probamos el mismo ID con otra ubicación para comprobar la actualización en SQLite.
+            String mensaje = "REGISTRO#WS-04#Alicante";           
             
             // Enviamos el mensaje a CENTRAL
             salida.writeUTF(mensaje);
