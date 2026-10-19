@@ -20,7 +20,7 @@ public class BaseDatos {
             CREATE TABLE IF NOT EXISTS estaciones (
             id TEXT PRIMARY KEY,
             ubicacion TEXT NOT NULL,
-            estado TEXT NOT NULL DEFAULT 'ACTIVA'
+            estado TEXT NOT NULL DEFAULT 'DISPONIBLE'
             )
             """;
 
@@ -46,9 +46,21 @@ public class BaseDatos {
 
         // Si la base de datos es antigua, añadimos la columna sin borrar registros.
         if (!tieneEstado) {
-            sentencia.executeUpdate("ALTER TABLE estaciones ADD COLUMN estado TEXT NOT NULL DEFAULT 'ACTIVA'");
+            sentencia.executeUpdate("ALTER TABLE estaciones ADD COLUMN estado TEXT NOT NULL DEFAULT 'DISPONIBLE'");
             System.out.println("Columna estado añadida a la tabla estaciones.");
         }
+
+            // Así conservamos las estaciones registradas anteriormente.
+            int estacionesActualizadas = sentencia.executeUpdate(
+                "UPDATE estaciones SET estado = 'DISPONIBLE' WHERE estado = 'ACTIVA'"
+            );
+
+            if (estacionesActualizadas > 0) {
+                System.out.println(
+                    "Estados antiguos actualizados: " + estacionesActualizadas
+                );
+            }
+            // Actualizamos los estados antiguos al nuevo formato.
             System.out.println("Tabla de estaciones preparada correctamente.");
         }
     }
@@ -60,9 +72,10 @@ public class BaseDatos {
 
         // Consulta SQL para insertar o actualizar una estación.
         String sql = """
-            INSERT INTO estaciones (id, ubicacion)
-            VALUES (?, ?)
-            ON CONFLICT(id) DO UPDATE SET ubicacion = excluded.ubicacion
+            INSERT INTO estaciones (id, ubicacion, estado)
+            VALUES (?, ?, 'DISPONIBLE')
+            ON CONFLICT(id) DO UPDATE SET
+                ubicacion = excluded.ubicacion
             """;
 
         // Abrimos la conexión con SQLite.

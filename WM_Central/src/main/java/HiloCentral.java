@@ -71,10 +71,8 @@ public void run() {
                 // y el tercero indica el nuevo estado de la estación.
                 String nuevoEstado = ubicacion;
 
-                // Comprobamos que el ID exista y que el estado sea válido.
-                if (!idEstacion.trim().isEmpty()
-                        && (nuevoEstado.equals("ACTIVA")
-                            || nuevoEstado.equals("INACTIVA"))) {
+               // Comprobamos que el ID no esté vacío y que el estado sea válido.
+                if (!idEstacion.trim().isEmpty() && (nuevoEstado.equals("DISPONIBLE") || nuevoEstado.equals("REGANDO") || nuevoEstado.equals("FUGA") || nuevoEstado.equals("FUERA_SERVICIO") || nuevoEstado.equals("DESCONECTADA"))) { 
 
                     try {
                         // Intentamos actualizar la estación en SQLite.
