@@ -81,4 +81,26 @@ public class BaseDatos {
             System.out.println("Estacion guardada en SQLite: " + id);
         }
     }
+
+    
+    // Cambia el estado de una estación que ya está registrada.
+    // Devuelve true si encuentra la estación y false si no existe.
+    public static boolean actualizarEstado(String id, String estado) throws SQLException {
+
+        String sql = "UPDATE estaciones SET estado = ? WHERE id = ?";
+
+        // Abrimos la conexión y preparamos la consulta SQL.
+        try (Connection conexion = conectar();
+             java.sql.PreparedStatement sentencia = conexion.prepareStatement(sql)) {
+
+            sentencia.setString(1, estado);
+            sentencia.setString(2, id);
+
+            // Devuelve el número de filas actualizadas.
+            int filasActualizadas = sentencia.executeUpdate();
+
+            return filasActualizadas > 0;
+        }
+    }
+
 }

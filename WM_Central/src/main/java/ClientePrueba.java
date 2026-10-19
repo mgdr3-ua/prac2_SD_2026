@@ -16,8 +16,8 @@ public class ClientePrueba {
             // Creamos el flujo para recibir respuestas del servidor
             DataInputStream entrada = new DataInputStream(socket.getInputStream());
 
-            // Probamos el mismo ID con otra ubicación para comprobar la actualización en SQLite.
-            String mensaje = "REGISTRO#WS-04#Alicante";           
+            // Probamos el cambio de estado de una estación ya registrada.
+            String mensaje = "ESTADO#WS-04#INACTIVA";            
             
             // Enviamos el mensaje a CENTRAL
             salida.writeUTF(mensaje);

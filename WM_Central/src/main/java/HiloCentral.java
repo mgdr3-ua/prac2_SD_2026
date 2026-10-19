@@ -64,7 +64,44 @@ public void run() {
                         salida.writeUTF("STATUS#ERROR#No se pudo guardar la estacion");
                         salida.flush();
                     }
+            
+            } else if (tipo.equals("ESTADO")) {
 
+                // En este mensaje, el segundo campo es el ID
+                // y el tercero indica el nuevo estado de la estación.
+                String nuevoEstado = ubicacion;
+
+                // Comprobamos que el ID exista y que el estado sea válido.
+                if (!idEstacion.trim().isEmpty()
+                        && (nuevoEstado.equals("ACTIVA")
+                            || nuevoEstado.equals("INACTIVA"))) {
+
+                    try {
+                        // Intentamos actualizar la estación en SQLite.
+                        boolean actualizada =
+                                BaseDatos.actualizarEstado(idEstacion, nuevoEstado);
+
+                        if (actualizada) {
+                            salida.writeUTF("STATUS#OK#Estado actualizado correctamente");
+                        } else {
+                            salida.writeUTF("STATUS#ERROR#Estacion no registrada");
+                        }
+
+                    } catch (SQLException e) {
+
+                        // Informamos del error si falla SQLite.
+                        System.err.println("Error al actualizar el estado: " + e.getMessage());
+                        salida.writeUTF("STATUS#ERROR#No se pudo actualizar el estado");
+                    }
+
+                } else {
+
+                    // Rechazamos identificadores vacíos y estados desconocidos.
+                    salida.writeUTF("STATUS#ERROR#Datos de estado no validos");
+                }
+
+                salida.flush();
+            
             } else {
 
                 // El registro contiene datos incorrectos
@@ -74,6 +111,7 @@ public void run() {
                 salida.writeUTF("STATUS#ERROR#Datos de registro no validos");
                 salida.flush();
             }   
+        
         } else {
              // El mensaje no contiene los tres campos esperados
             System.out.println("ERROR: formato de mensaje incorrecto.");
@@ -83,7 +121,7 @@ public void run() {
             salida.flush();
         }
 
-    } catch (IOException e) {
+        } catch (IOException e) {
         // Controlamos posibles errores de comunicación
         System.out.println("Error al recibir datos del cliente: " + e.getMessage());
 
