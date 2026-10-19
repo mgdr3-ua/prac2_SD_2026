@@ -18,8 +18,9 @@ public class BaseDatos {
 
         String sql = """
             CREATE TABLE IF NOT EXISTS estaciones (
-                id TEXT PRIMARY KEY,
-                ubicacion TEXT NOT NULL
+            id TEXT PRIMARY KEY,
+            ubicacion TEXT NOT NULL,
+            estado TEXT NOT NULL DEFAULT 'ACTIVA'
             )
             """;
 
@@ -29,6 +30,25 @@ public class BaseDatos {
              Statement sentencia = conexion.createStatement()) {
 
             sentencia.executeUpdate(sql);
+
+            // Comprobamos si la tabla existente ya tiene la columna estado.
+            boolean tieneEstado = false;
+
+            try (java.sql.ResultSet columnas = sentencia.executeQuery("PRAGMA table_info(estaciones)")) {
+
+                while (columnas.next()) {
+                    if ("estado".equalsIgnoreCase(columnas.getString("name"))) {
+                        tieneEstado = true;
+                        break;
+                    }
+                }
+            }
+
+        // Si la base de datos es antigua, añadimos la columna sin borrar registros.
+        if (!tieneEstado) {
+            sentencia.executeUpdate("ALTER TABLE estaciones ADD COLUMN estado TEXT NOT NULL DEFAULT 'ACTIVA'");
+            System.out.println("Columna estado añadida a la tabla estaciones.");
+        }
             System.out.println("Tabla de estaciones preparada correctamente.");
         }
     }
