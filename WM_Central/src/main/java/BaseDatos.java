@@ -65,7 +65,21 @@ public class BaseDatos {
         }
     }
 
-    
+    // Marca como desconectadas las estaciones al iniciar CENTRAL.
+    public static void desconectarEstaciones() throws SQLException {
+
+        String sql = "UPDATE estaciones SET estado = 'DESCONECTADA'";
+
+        try (Connection conexion = conectar();
+            Statement sentencia = conexion.createStatement()) {
+
+            int cantidad = sentencia.executeUpdate(sql);
+
+            System.out.println(
+                "Estaciones marcadas como desconectadas: " + cantidad
+            );
+        }
+    }
     // Guarda una estación en la base de datos SQLite.
     // Si la estación ya existe, actualiza su ubicación.
     public static void guardarEstacion(String id, String ubicacion) throws SQLException {
