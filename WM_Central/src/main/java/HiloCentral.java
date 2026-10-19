@@ -2,6 +2,7 @@ import java.net.Socket;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.DataOutputStream;
+import java.sql.SQLException;
 
 public class HiloCentral extends Thread {
 
@@ -47,12 +48,22 @@ public void run() {
 
            if (tipo.equals("REGISTRO") && !idEstacion.trim().isEmpty() && !ubicacion.trim().isEmpty()) {
 
-                // El registro es válido
-                System.out.println("Registro valido: estacion " + idEstacion);
+                // Guardamos la estación en SQLite.
+                 try {
+                    BaseDatos.guardarEstacion(idEstacion, ubicacion);
 
-                // Enviamos una confirmación al cliente
-                salida.writeUTF("STATUS#OK#Estacion registrada correctamente");
-                salida.flush();
+                    // Solo confirmamos el registro si SQLite funciona.
+                    salida.writeUTF("STATUS#OK#Estacion registrada correctamente");
+                    salida.flush();
+
+                    } catch (SQLException e) {
+
+                        // Si falla la base de datos, avisamos al cliente.
+                        System.err.println("Error al guardar la estacion: " + e.getMessage());
+
+                        salida.writeUTF("STATUS#ERROR#No se pudo guardar la estacion");
+                        salida.flush();
+                    }
 
             } else {
 
