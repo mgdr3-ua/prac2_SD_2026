@@ -21,9 +21,20 @@ public class WM_WS_M{
         }
 
         //Guardamos los parámetros:
-        int puertoMonitor = Integer.parseInt(args[0]);
+        int puertoMonitor;
+        int puertoCentral;
+
+        try{
+            puertoMonitor = Integer.parseInt(args[0]);
+            puertoCentral = Integer.parseInt(args[2]);
+        }catch(NumberFormatException e){
+            System.out.println("ERROR: Los puertos deben ser números.");
+
+            return;
+        }
+
+
         String ipCentral = args[1];
-        int puertoCentral = Integer.parseInt(args[2]);
         String idEstacion = args[3];
 
         // Mostramos la confiuración:
@@ -62,7 +73,14 @@ public class WM_WS_M{
 
         System.out.println("Respuesta de la Central: " + respuesta);
 
-        } catch (IOException e){
+
+        //Si central rechaza el registro -> NO CONTINUAMOS
+        if(!respuesta.startsWith("STATUS#OK#")){
+            System.out.println("ERROR: Registro rechazado por Central.");
+
+            return;
+        } 
+            } catch (IOException e){
 
             System.out.println("ERROR: No se puede conectar con WM_Central.");
             System.out.println("Motivo: " + e.getMessage());
@@ -73,21 +91,32 @@ public class WM_WS_M{
 
             System.out.println("Servidor del monitor iniciado.");
             System.out.println("Escuchando en el puerto: " + puertoMonitor);
-            System.out.println("Esperando conexion de WM_WS_M ...");
+            System.out.println("Esperando conexion de WM_WS_E ...");
 
             //Esperamos hasta que el Engine establezca una conexión 
-            Socket socketEngine = servidorMonitor.accept();
+            try(Socket socketEngine = servidorMonitor.accept()){
 
             System.out.println("WM_WS_E conectado desde: "
                 + socketEngine.getInetAddress()
                 + ":" + socketEngine.getPort());
 
+            
+                //Creamos los flujos para comunicarnos con el Engine
             DataOutputStream salidaEngine = 
                 new DataOutputStream(socketEngine.getOutputStream());
 
             DataInputStream entradaEngine = 
                 new DataInputStream(socketEngine.getInputStream());
 
+
+
+            //TIempo máx. de espera de una resp = 3seg
+            socketEngine.setSoTimeout(3000);
+
+
+             while (true) {
+                    
+        
             //Enviamos una comprobación de salud al Engine
             salidaEngine.writeUTF("PING");
             salidaEngine.flush();
@@ -104,12 +133,21 @@ public class WM_WS_M{
                 System.out.println("Estado del Engine: SALUDABLE");
             }else{
                 System.out.println("Estado del Engine: ERROR");
+                break;
             }
 
-            
+            //Esperamos 1 seg antes de la siguiente comprob.
+            Thread.sleep(1000);
 
-            //Por ahora cerraremos la conexion de prueba
-            socketEngine.close();
+            } 
+        }
+
+
+    }catch (InterruptedException e){
+
+        Thread.currentThread().interrupt();
+        System.out.println("Monitor interrumpido");
+
         } catch(IOException e){
 
             System.out.println("ERROR en el servidor del monitor.");

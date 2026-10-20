@@ -8,7 +8,7 @@ public class WM_WS_E{
 
     public static void main(String[] args){
 
-        System.out.println("=== WATER MANAGER ===");
+        System.out.println(" --- WATER MANAGER --- ");
         System.out.println("MÓDULO: Engine de estación (WM_WS_E)");
 
         //Datos de conexión del monitor
@@ -29,24 +29,32 @@ public class WM_WS_E{
                 new DataOutputStream(socket.getOutputStream());
 
             
-            //ESperamos el mensaje del monitor
-            String mensaje = entrada.readUTF();
+
+            while (true) {
+
+                //ESperamos el mensaje del monitor
+                String mensaje = entrada.readUTF();
 
             System.out.println("Mensaje recibido del Monitor: " + mensaje);
 
             if (mensaje.equals("PING")) {
+
                 //Respondemos indicando que el Engine funciona
                 salida.writeUTF("OK");
                 salida.flush();
 
                 System.out.println("Respuesta enviada: OK!");
+            }else{
+
+                System.out.println("Mensaje desconocido: " + mensaje);
             }
         
+        }
+    } catch (IOException e){
 
-        }catch (IOException e){
-
-            System.out.println("ERROR al conectar con WM_WS_M.");
-            System.out.println("Motivo: " + e.getMessage());
+        System.out.println("ERROR: comunicación con WM_WS_M.");
+        System.out.println("Motivo: " + e.getMessage());
+        
         }
     }
 }
