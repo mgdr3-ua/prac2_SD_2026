@@ -128,11 +128,18 @@ public class WM_WS_M{
 
             System.out.println("Respuesta del Engine: " + respuestaEngine);
 
-            if (respuestaEngine.equals("OK")) {
+            if (respuestaEngine.endsWith("OK")) {
 
                 System.out.println("Estado del Engine: SALUDABLE");
+                
+            }else if(respuestaEngine.equals("KO")){
+
+                System.out.println("ALERTA!! Averia detectada en la estación " + idEstacion);
+                break;
+
             }else{
-                System.out.println("Estado del Engine: ERROR");
+
+                System.out.println("ERROR: Respuesta desconocida del Engine.");
                 break;
             }
 

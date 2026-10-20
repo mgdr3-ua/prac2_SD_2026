@@ -4,6 +4,9 @@ import java.io.IOException;
 import java.io.DataOutputStream;
 import java.io.DataInputStream;
 
+import java.util.Scanner;
+import java.util.concurrent.atomic.AtomicBoolean;
+
 public class WM_WS_E{
 
     public static void main(String[] args){
@@ -30,6 +33,32 @@ public class WM_WS_E{
 
             
 
+            // Variable compartida que indica si hay una averia
+            AtomicBoolean averia = new AtomicBoolean(false);
+
+            // Hilo independiente para detectar las teclas del usuario
+            Thread teclado = new Thread(() -> {
+
+                Scanner scanner = new Scanner(System.in);
+
+                System.out.println("Pulsa F + enter para simular una fuga.");
+
+                while (true) {
+                    
+                    String opcion = scanner.nextLine();
+
+                    if(opcion.equalsIgnoreCase("F")){
+
+                        averia.set(true);
+                        System.out.println("AVERIA SIMULADA: Fuga detectada");
+                }
+            }
+        });
+
+        teclado.setDaemon(true);
+        teclado.start();
+
+
             while (true) {
 
                 //ESperamos el mensaje del monitor
@@ -39,11 +68,21 @@ public class WM_WS_E{
 
             if (mensaje.equals("PING")) {
 
-                //Respondemos indicando que el Engine funciona
-                salida.writeUTF("OK");
-                salida.flush();
+                if(averia.get()){
 
-                System.out.println("Respuesta enviada: OK!");
+                    //Si esxiste una averia -> respondemos KO
+                    salida.writeUTF("KO");
+                    salida.flush();
+
+                    System.out.println("Respuesta enviada: KO");
+                }else{
+                    //Si todo funciona -> REspondemos OK     
+                    salida.writeUTF("OK");
+                    salida.flush();
+
+                    System.out.println("Respuesta enviada: OK");
+                }
+
             }else{
 
                 System.out.println("Mensaje desconocido: " + mensaje);
