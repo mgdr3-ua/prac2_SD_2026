@@ -80,8 +80,33 @@ public class WM_WS_M{
 
             System.out.println("WM_WS_E conectado desde: "
                 + socketEngine.getInetAddress()
-                + ":" + socketEngine.getPort()
-            );
+                + ":" + socketEngine.getPort());
+
+            DataOutputStream salidaEngine = 
+                new DataOutputStream(socketEngine.getOutputStream());
+
+            DataInputStream entradaEngine = 
+                new DataInputStream(socketEngine.getInputStream());
+
+            //Enviamos una comprobación de salud al Engine
+            salidaEngine.writeUTF("PING");
+            salidaEngine.flush();
+
+            System.out.println("Comprobación enviada: PING");
+
+            //Esperamos la respuesta del Engine
+            String respuestaEngine = entradaEngine.readUTF();
+
+            System.out.println("Respuesta del Engine: " + respuestaEngine);
+
+            if (respuestaEngine.equals("OK")) {
+
+                System.out.println("Estado del Engine: SALUDABLE");
+            }else{
+                System.out.println("Estado del Engine: ERROR");
+            }
+
+            
 
             //Por ahora cerraremos la conexion de prueba
             socketEngine.close();

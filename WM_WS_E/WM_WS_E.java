@@ -1,6 +1,9 @@
 import java.net.Socket;
 import java.io.IOException;
 
+import java.io.DataOutputStream;
+import java.io.DataInputStream;
+
 public class WM_WS_E{
 
     public static void main(String[] args){
@@ -17,6 +20,28 @@ public class WM_WS_E{
 
             System.out.println("Conexión establecida con WM_WS_M.");
             System.out.println("Monitor: " + ipMonitor + ":" + puertoMonitor);
+
+            //Creamos los flujos de comunicación
+            DataInputStream entrada = 
+                new DataInputStream(socket.getInputStream());
+
+            DataOutputStream salida =
+                new DataOutputStream(socket.getOutputStream());
+
+            
+            //ESperamos el mensaje del monitor
+            String mensaje = entrada.readUTF();
+
+            System.out.println("Mensaje recibido del Monitor: " + mensaje);
+
+            if (mensaje.equals("PING")) {
+                //Respondemos indicando que el Engine funciona
+                salida.writeUTF("OK");
+                salida.flush();
+
+                System.out.println("Respuesta enviada: OK!");
+            }
+        
 
         }catch (IOException e){
 
