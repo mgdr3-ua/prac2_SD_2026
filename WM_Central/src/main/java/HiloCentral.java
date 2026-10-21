@@ -3,6 +3,8 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.DataOutputStream;
 import java.sql.SQLException;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 
 public class HiloCentral extends Thread {
 
@@ -96,6 +98,38 @@ public void run() {
 
                     // Rechazamos identificadores vacíos y estados desconocidos.
                     salida.writeUTF("STATUS#ERROR#Datos de estado no validos");
+                }
+
+                salida.flush();
+
+            } else if (tipo.equals("SOLICITUD_RIEGO")) {
+
+                // El segundo campo identifica la estación.
+                // El tercero identifica al operario que solicita el riego.
+                String idOperario = ubicacion;
+
+                if (idEstacion.trim().isEmpty() || idOperario.trim().isEmpty()) {
+
+                    salida.writeUTF("STATUS#ERROR#Datos de solicitud no validos");
+
+                } else {
+
+                    try {
+                        // Comprobamos si la estación existe y está disponible.
+                        boolean disponible = BaseDatos.estacionDisponible(idEstacion);
+
+                        if (disponible) {
+                            // La estación puede continuar con el proceso de autorización.
+                            salida.writeUTF("STATUS#OK#Estacion disponible");
+                        } else {
+                            salida.writeUTF("STATUS#ERROR#Estacion no disponible");
+                        }
+
+                    } catch (SQLException e) {
+
+                        System.err.println("Error al consultar la estacion: " + e.getMessage());
+                        salida.writeUTF("STATUS#ERROR#No se pudo consultar la estacion");
+                    }
                 }
 
                 salida.flush();

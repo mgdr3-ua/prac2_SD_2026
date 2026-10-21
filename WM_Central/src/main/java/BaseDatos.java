@@ -2,6 +2,8 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 
 public class BaseDatos {
 
@@ -130,4 +132,22 @@ public class BaseDatos {
         }
     }
 
+    // Comprueba si una estación está disponible para iniciar un riego.
+    public static boolean estacionDisponible(String id) throws SQLException {
+
+        String sql = "SELECT estado FROM estaciones WHERE id = ?";
+
+        try (Connection conexion = conectar();
+            PreparedStatement sentencia = conexion.prepareStatement(sql)) {
+
+            sentencia.setString(1, id);
+
+            try (ResultSet resultado = sentencia.executeQuery()) {
+
+                // Solo está disponible si existe y su estado es DISPONIBLE.
+                return resultado.next()
+                        && "DISPONIBLE".equals(resultado.getString("estado"));
+            }
+        }
+    }
 }
