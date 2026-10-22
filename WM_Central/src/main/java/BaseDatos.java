@@ -144,6 +144,24 @@ public class BaseDatos {
         }
     }
 
+    // Bloquea una estación para que no pueda iniciar nuevos riegos.
+    public static boolean bloquearEstacion(String id) throws SQLException {
+
+        // Solo bloqueamos estaciones que estén disponibles.
+        String sql = "UPDATE estaciones SET estado = 'FUERA_SERVICIO' "
+                + "WHERE id = ? AND estado = 'DISPONIBLE'";
+
+        try (Connection conexion = conectar();
+            PreparedStatement sentencia = conexion.prepareStatement(sql)) {
+
+            sentencia.setString(1, id);
+
+            int filasActualizadas = sentencia.executeUpdate();
+
+            return filasActualizadas > 0;
+        }
+    }
+
     // Comprueba si una estación está disponible para iniciar un riego.
     public static boolean estacionDisponible(String id) throws SQLException {
 

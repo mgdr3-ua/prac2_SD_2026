@@ -12,6 +12,7 @@ public class MenuCentral extends Thread {
 
             System.out.println("\n=== MENU CENTRAL ===");
             System.out.println("1. Consultar estaciones");
+            System.out.println("2. Bloquear estacion");
             System.out.println("0. Salir del menu");
             System.out.print("Selecciona una opcion: ");
 
@@ -25,8 +26,23 @@ public class MenuCentral extends Thread {
             }
 
             if (opcion == 1) {
-                // Mostramos las estaciones guardadas en SQLite.
-                ConsultarEstaciones.mostrarEstaciones();           
+                ConsultarEstaciones.mostrarEstaciones();
+
+            } else if (opcion == 2) {
+
+                // Pedimos el identificador de la estación que queremos bloquear.
+                System.out.print("Introduce el ID de la estacion: ");
+                String idEstacion = teclado.next();
+
+                try {
+                    if (BaseDatos.bloquearEstacion(idEstacion)) {
+                        System.out.println("Estacion " + idEstacion + " bloqueada correctamente.");
+                    } else {
+                        System.out.println("No se puede bloquear la estacion.");
+                    }
+                } catch (java.sql.SQLException e) {
+                    System.out.println("Error al bloquear la estacion: " + e.getMessage());
+                }           
             } else if (opcion == 0) {
                 System.out.println("Menu cerrado.");
             } else {
