@@ -67,6 +67,18 @@ public class BaseDatos {
         }
     }
 
+    public static void crearTablaOperarios() throws SQLException {
+
+        String sql = "CREATE TABLE IF NOT EXISTS operarios (id TEXT PRIMARY KEY)";
+
+        try (Connection conexion = conectar();
+            Statement sentencia = conexion.createStatement()) {
+
+            sentencia.executeUpdate(sql);
+            System.out.println("Tabla de operarios preparada correctamente.");
+        }
+    }
+
     // Marca como desconectadas las estaciones al iniciar CENTRAL.
     public static void desconectarEstaciones() throws SQLException {
 
@@ -163,6 +175,49 @@ public class BaseDatos {
 
             // Devuelve true si se ha actualizado la estación.
             return sentencia.executeUpdate() > 0;
+        }
+    }
+
+    // Comprueba si un operario está registrado en la base de datos.
+    // Devuelve true si existe y false si no está registrado.
+    public static boolean operarioRegistrado(String idOperario) throws SQLException {
+
+        // Buscamos un operario que tenga el identificador recibido.
+        // El ? se sustituirá por el ID para evitar introducirlo directamente en SQL.
+        String sql = "SELECT 1 FROM operarios WHERE id = ?";
+
+        // Abrimos la conexión y preparamos la consulta.
+        // Los recursos se cierran automáticamente al terminar.
+        try (Connection conexion = conectar();
+            PreparedStatement sentencia = conexion.prepareStatement(sql)) {
+
+            // Sustituimos el ? por el identificador del operario.
+            sentencia.setString(1, idOperario);
+
+            // Ejecutamos la consulta y comprobamos si devuelve algún resultado.
+            try (ResultSet resultado = sentencia.executeQuery()) {
+
+                // Si existe una fila, el operario está registrado.
+                return resultado.next();
+            }
+        }
+    }
+
+    // Registra un operario en la base de datos utilizando su identificador.
+    public static void registrarOperario(String idOperario) throws SQLException {
+
+        // Evitamos registrar dos veces al mismo operario.
+        String sql = "INSERT OR IGNORE INTO operarios (id) VALUES (?)";
+
+        // Abrimos la conexión y preparamos la sentencia SQL.
+        try (Connection conexion = conectar();
+            PreparedStatement sentencia = conexion.prepareStatement(sql)) {
+
+            // Sustituimos el ? por el identificador del operario.
+            sentencia.setString(1, idOperario);
+
+            // Ejecutamos la inserción en la base de datos.
+            sentencia.executeUpdate();
         }
     }
 }

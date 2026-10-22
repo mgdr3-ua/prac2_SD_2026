@@ -153,31 +153,29 @@ public void run() {
                 salida.flush();
 
             } else if (tipo.equals("SOLICITUD_RIEGO")) {
-
-                // El segundo campo identifica la estación.
-                // El tercero identifica al operario que solicita el riego.
+                 // El tercero identifica al operario que solicita el riego.
                 String idOperario = ubicacion;
 
                 if (idEstacion.trim().isEmpty() || idOperario.trim().isEmpty()) {
                     salida.writeUTF("STATUS#ERROR#Datos de solicitud no validos");
                 } else {
-
                     try {
-                        
-                        // Comprobamos si la estación existe y está disponible.
-                        boolean disponible = BaseDatos.estacionDisponible(idEstacion);
-
-                        if (disponible) {
-                            // La estación puede continuar con el proceso de autorización.
-                            salida.writeUTF("STATUS#OK#Estacion disponible");
+                        // Primero comprobamos que el operario esté registrado.
+                        if (!BaseDatos.operarioRegistrado(idOperario)) {
+                            salida.writeUTF("STATUS#ERROR#Operario no registrado");
                         } else {
-                            salida.writeUTF("STATUS#ERROR#Estacion no disponible");
+                            // Si está registrado, comprobamos la disponibilidad de la estación.
+                            boolean disponible = BaseDatos.estacionDisponible(idEstacion);
+
+                            if (disponible) {
+                                salida.writeUTF("STATUS#OK#Estacion disponible");
+                            } else {
+                                salida.writeUTF("STATUS#ERROR#Estacion no disponible");
+                            }
                         }
-
                     } catch (SQLException e) {
-
-                        System.err.println("Error al consultar la estacion: " + e.getMessage());
-                        salida.writeUTF("STATUS#ERROR#No se pudo consultar la estacion");
+                        System.err.println("Error al consultar la solicitud de riego: " + e.getMessage());
+                        salida.writeUTF("STATUS#ERROR#No se pudo consultar la solicitud de riego");
                     }
                 }
                 salida.flush();

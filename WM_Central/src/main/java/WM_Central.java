@@ -29,6 +29,7 @@ public class WM_Central {
         // Inicializamos SQLite antes de aceptar conexiones de clientes.
         try {
             BaseDatos.crearTablaEstaciones(); // Preparamos la base de datos.
+            BaseDatos.crearTablaOperarios();
             BaseDatos.desconectarEstaciones(); // Al reiniciar CENTRAL, las estaciones todavía no están conectadas.
             
             System.out.println("Base de datos SQLite inicializada correctamente.");
