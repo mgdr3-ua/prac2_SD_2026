@@ -116,7 +116,7 @@ public class BaseDatos {
     // Devuelve true si encuentra la estación y false si no existe.
     public static boolean actualizarEstado(String id, String estado) throws SQLException {
 
-        String sql = "UPDATE estaciones SET estado = ? WHERE id = ?";
+        String sql = "UPDATE estaciones SET estado = ? WHERE id = ? AND estado != 'FUGA'";
 
         // Abrimos la conexión y preparamos la consulta SQL.
         try (Connection conexion = conectar();
@@ -148,6 +148,21 @@ public class BaseDatos {
                 return resultado.next()
                         && "DISPONIBLE".equals(resultado.getString("estado"));
             }
+        }
+    }
+
+    // Permite volver a DISPONIBLE cuando se resuelve una fuga.
+    public static boolean resolverAveria(String id) throws SQLException {
+
+        String sql = "UPDATE estaciones SET estado = 'DISPONIBLE' WHERE id = ? AND estado = 'FUGA'";
+
+        try (Connection conexion = conectar();
+            PreparedStatement sentencia = conexion.prepareStatement(sql)) {
+
+            sentencia.setString(1, id);
+
+            // Devuelve true si se ha actualizado la estación.
+            return sentencia.executeUpdate() > 0;
         }
     }
 }

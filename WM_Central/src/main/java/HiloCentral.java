@@ -90,7 +90,7 @@ public void run() {
                         if (actualizada) {
                             salida.writeUTF("STATUS#OK#Estado actualizado correctamente");
                         } else {
-                            salida.writeUTF("STATUS#ERROR#Estacion no registrada");
+                            salida.writeUTF("STATUS#ERROR#No se puede actualizar el estado de la estacion");
                         }
 
                     } catch (SQLException e) {
@@ -121,13 +121,23 @@ public void run() {
                     try {
                         // Si hay una fuga, cambiamos el estado a FUGA.
                         // Si se ha resuelto, volvemos a DISPONIBLE.
-                        String nuevoEstado = tipoAveria.equals("FUGA") ? "FUGA" : "DISPONIBLE";
+                        // Procesamos la fuga o su resolución.
+                        boolean actualizada;
 
-                        boolean actualizada = BaseDatos.actualizarEstado(idEstacion, nuevoEstado);
+                        if (tipoAveria.equals("FUGA")) {
+
+                            // Registramos la fuga en SQLite.
+                            actualizada = BaseDatos.actualizarEstado(idEstacion, "FUGA");
+
+                        } else {
+
+                            // Solo resolvemos la avería si la estación estaba en FUGA.
+                            actualizada = BaseDatos.resolverAveria(idEstacion);
+                        }
 
                         if (actualizada) {
 
-                            System.out.println("Estacion " + idEstacion + " - Estado: " + nuevoEstado);
+                            System.out.println("Estacion " + idEstacion + " - Averia: " + tipoAveria);                            
                             salida.writeUTF("STATUS#OK#Averia procesada correctamente");
 
                         } else {
