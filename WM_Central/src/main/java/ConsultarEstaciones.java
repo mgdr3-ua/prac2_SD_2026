@@ -6,7 +6,7 @@ import java.sql.Statement;
 
 public class ConsultarEstaciones {
 
-    public static void main(String[] args) {
+    public static void mostrarEstaciones() {
 
         // Consulta para obtener las estaciones registradas.
         String sql = "SELECT id, ubicacion, estado FROM estaciones";

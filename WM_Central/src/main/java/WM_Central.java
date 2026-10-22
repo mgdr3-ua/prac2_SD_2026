@@ -45,6 +45,10 @@ public class WM_Central {
         try (ServerSocket servidor = new ServerSocket(puerto)) {
 
         System.out.println("Servidor iniciado correctamente.");
+        // Iniciamos el menú en otro hilo para poder utilizarlo
+        // mientras CENTRAL sigue atendiendo conexiones de las estaciones.
+        MenuCentral menu = new MenuCentral();
+        menu.start();
         System.out.println("Esperando conexiones...");
         
         while (true) {
