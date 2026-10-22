@@ -77,6 +77,13 @@ public void run() {
                 if (!idEstacion.trim().isEmpty() && (nuevoEstado.equals("DISPONIBLE") || nuevoEstado.equals("REGANDO") || nuevoEstado.equals("FUGA") || nuevoEstado.equals("FUERA_SERVICIO") || nuevoEstado.equals("DESCONECTADA"))) { 
 
                     try {
+                        // Comprobación: no permitir iniciar un riego si la estación no está disponible.
+                        if (nuevoEstado.equals("REGANDO") && !BaseDatos.estacionDisponible(idEstacion)) {
+
+                            salida.writeUTF("STATUS#ERROR#La estacion no esta disponible para regar");
+                            salida.flush();
+                            return;
+                        }
                         // Intentamos actualizar la estación en SQLite.
                         boolean actualizada = BaseDatos.actualizarEstado(idEstacion, nuevoEstado);
 
@@ -146,6 +153,7 @@ public void run() {
                 } else {
 
                     try {
+                        
                         // Comprobamos si la estación existe y está disponible.
                         boolean disponible = BaseDatos.estacionDisponible(idEstacion);
 
