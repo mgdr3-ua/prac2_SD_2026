@@ -162,6 +162,23 @@ public class BaseDatos {
         }
     }
 
+    // Activa una estación que estaba fuera de servicio.
+    public static boolean activarEstacion(String id) throws SQLException {
+
+        String sql = "UPDATE estaciones SET estado = 'DISPONIBLE' "
+                + "WHERE id = ? AND estado = 'FUERA_SERVICIO'";
+
+        try (Connection conexion = conectar();
+            PreparedStatement sentencia = conexion.prepareStatement(sql)) {
+
+            sentencia.setString(1, id);
+
+            int filasActualizadas = sentencia.executeUpdate();
+
+            return filasActualizadas > 0;
+        }
+    }
+
     // Comprueba si una estación está disponible para iniciar un riego.
     public static boolean estacionDisponible(String id) throws SQLException {
 
