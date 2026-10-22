@@ -78,8 +78,7 @@ public void run() {
 
                     try {
                         // Intentamos actualizar la estación en SQLite.
-                        boolean actualizada =
-                                BaseDatos.actualizarEstado(idEstacion, nuevoEstado);
+                        boolean actualizada = BaseDatos.actualizarEstado(idEstacion, nuevoEstado);
 
                         if (actualizada) {
                             salida.writeUTF("STATUS#OK#Estado actualizado correctamente");
@@ -101,6 +100,40 @@ public void run() {
                 }
 
                 salida.flush();
+           
+            } else if (tipo.equals("AVERIA")) {
+
+                // El monitor informa de una fuga o de su resolución.
+                String tipoAveria = ubicacion;
+
+                // Comprobamos que el ID y el tipo de avería sean válidos.
+                if (idEstacion.trim().isEmpty() || (!tipoAveria.equals("FUGA") && !tipoAveria.equals("RESUELTA"))) {
+                    salida.writeUTF("STATUS#ERROR#Datos de averia no validos");
+                } else {
+                       
+                    try {
+                        // Si hay una fuga, cambiamos el estado a FUGA.
+                        // Si se ha resuelto, volvemos a DISPONIBLE.
+                        String nuevoEstado = tipoAveria.equals("FUGA") ? "FUGA" : "DISPONIBLE";
+
+                        boolean actualizada = BaseDatos.actualizarEstado(idEstacion, nuevoEstado);
+
+                        if (actualizada) {
+
+                            System.out.println("Estacion " + idEstacion + " - Estado: " + nuevoEstado);
+                            salida.writeUTF("STATUS#OK#Averia procesada correctamente");
+
+                        } else {
+                            salida.writeUTF("STATUS#ERROR#Estacion no registrada");
+                        }
+
+                    } catch (SQLException e) {
+
+                        System.err.println("Error al procesar averia: " + e.getMessage());
+                        salida.writeUTF("STATUS#ERROR#No se pudo procesar la averia");
+                    }
+                }
+                salida.flush();
 
             } else if (tipo.equals("SOLICITUD_RIEGO")) {
 
@@ -109,9 +142,7 @@ public void run() {
                 String idOperario = ubicacion;
 
                 if (idEstacion.trim().isEmpty() || idOperario.trim().isEmpty()) {
-
                     salida.writeUTF("STATUS#ERROR#Datos de solicitud no validos");
-
                 } else {
 
                     try {
@@ -131,7 +162,6 @@ public void run() {
                         salida.writeUTF("STATUS#ERROR#No se pudo consultar la estacion");
                     }
                 }
-
                 salida.flush();
             
             } else {

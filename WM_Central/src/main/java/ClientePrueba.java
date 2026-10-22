@@ -17,7 +17,7 @@ public class ClientePrueba {
             DataInputStream entrada = new DataInputStream(socket.getInputStream());
 
             // Probamos el cambio de estado de una estación ya registrada.
-            String mensaje = "SOLICITUD_RIEGO#WS-04#OP-01";           
+            String mensaje = "AVERIA#WS-04#FUGA";           
             
             // Enviamos el mensaje a CENTRAL
             salida.writeUTF(mensaje);
