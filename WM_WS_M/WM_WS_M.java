@@ -135,8 +135,37 @@ public class WM_WS_M{
             }else if(respuestaEngine.equals("KO")){
 
                 System.out.println("ALERTA!! Averia detectada en la estación " + idEstacion);
-                break;
+                
+                //Preparamos la notificación de averia
+                String mensajeAveria = "AVERIA#" + idEstacion + "#FUGA";
 
+                //Abrimos una conexión TCP con Central
+                try(Socket socketCentral = new Socket(ipCentral, puertoCentral)){
+
+                    DataOutputStream salidaCentral =
+                        new DataOutputStream(socketCentral.getOutputStream());
+
+                    DataInputStream entradaCentral =
+                        new DataInputStream(socketCentral.getInputStream());
+
+                    // Enviamos la averia 
+                    salidaCentral.writeUTF(mensajeAveria);
+                    salidaCentral.flush();
+
+                    System.out.println("Notificación enviada: " + mensajeAveria);
+
+                    // Esperamos la respuesta de Central
+                    socketCentral.setSoTimeout(3000);
+                    String respuestaCentral = entradaCentral.readUTF();
+
+                    System.out.println("Respuesta de Central: " + respuestaCentral);
+
+                }catch(IOException e){
+
+                    System.out.println("ERROR: para notificar la averia. ");
+                    System.out.println("Motivo: " + e.getMessage());
+                }
+                break;
             }else{
 
                 System.out.println("ERROR: Respuesta desconocida del Engine.");
