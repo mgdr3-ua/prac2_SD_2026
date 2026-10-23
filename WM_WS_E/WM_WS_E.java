@@ -42,6 +42,7 @@ public class WM_WS_E{
                 Scanner scanner = new Scanner(System.in);
 
                 System.out.println("Pulsa F + enter para simular una fuga.");
+                System.out.println("Pulsa R + enter para resolver la fuga.");
 
                 while (true) {
                     
@@ -49,8 +50,15 @@ public class WM_WS_E{
 
                     if(opcion.equalsIgnoreCase("F")){
 
+                        //Activamos la simulación de fuga
                         averia.set(true);
                         System.out.println("AVERIA SIMULADA: Fuga detectada");
+                }else if(opcion.equalsIgnoreCase("R")){
+
+                    //REsolvemos la averia simulada
+                    averia.set(false);
+
+                    System.out.println("RECUPERACIÓN: Fuga resuelta correctamente.");
                 }
             }
         });

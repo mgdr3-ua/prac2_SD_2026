@@ -84,6 +84,8 @@ public class WM_WS_M{
 
             System.out.println("ERROR: No se puede conectar con WM_Central.");
             System.out.println("Motivo: " + e.getMessage());
+            
+            return;
         }
 
         //Iniciamos el servidor TCP del monitor para recibir al Engine
@@ -110,8 +112,11 @@ public class WM_WS_M{
 
 
 
-            //TIempo máx. de espera de una resp = 3seg
+            //Tiempo máx. de espera de una resp = 3seg
             socketEngine.setSoTimeout(3000);
+
+            //Indica si ya hemos notificado una fuga a CENTRAL
+            boolean averiaActiva = false;
 
 
              while (true) {
@@ -128,52 +133,109 @@ public class WM_WS_M{
 
             System.out.println("Respuesta del Engine: " + respuestaEngine);
 
-            if (respuestaEngine.endsWith("OK")) {
+            
+if (respuestaEngine.equals("OK")) {
 
-                System.out.println("Estado del Engine: SALUDABLE");
-                
-            }else if(respuestaEngine.equals("KO")){
+    System.out.println("Estado del Engine: SALUDABLE");
 
-                System.out.println("ALERTA!! Averia detectada en la estación " + idEstacion);
-                
-                //Preparamos la notificación de averia
-                String mensajeAveria = "AVERIA#" + idEstacion + "#FUGA";
+    // Si antes habia una averia, notificamos su recuperacion
+    if (averiaActiva) {
 
-                //Abrimos una conexión TCP con Central
-                try(Socket socketCentral = new Socket(ipCentral, puertoCentral)){
+        String mensajeRecuperacion =
+                "AVERIA#" + idEstacion + "#RESUELTA";
 
-                    DataOutputStream salidaCentral =
-                        new DataOutputStream(socketCentral.getOutputStream());
+        try (Socket socketCentral =
+                     new Socket(ipCentral, puertoCentral)) {
 
-                    DataInputStream entradaCentral =
-                        new DataInputStream(socketCentral.getInputStream());
+            DataOutputStream salidaCentral =
+                    new DataOutputStream(socketCentral.getOutputStream());
 
-                    // Enviamos la averia 
-                    salidaCentral.writeUTF(mensajeAveria);
-                    salidaCentral.flush();
+            DataInputStream entradaCentral =
+                    new DataInputStream(socketCentral.getInputStream());
 
-                    System.out.println("Notificación enviada: " + mensajeAveria);
+            socketCentral.setSoTimeout(3000);
 
-                    // Esperamos la respuesta de Central
-                    socketCentral.setSoTimeout(3000);
-                    String respuestaCentral = entradaCentral.readUTF();
+            salidaCentral.writeUTF(mensajeRecuperacion);
+            salidaCentral.flush();
 
-                    System.out.println("Respuesta de Central: " + respuestaCentral);
+            System.out.println(
+                    "Recuperacion enviada: " + mensajeRecuperacion);
 
-                }catch(IOException e){
+            String respuestaCentral = entradaCentral.readUTF();
 
-                    System.out.println("ERROR: para notificar la averia. ");
-                    System.out.println("Motivo: " + e.getMessage());
-                }
-                break;
-            }else{
+            System.out.println(
+                    "Respuesta de CENTRAL: " + respuestaCentral);
 
-                System.out.println("ERROR: Respuesta desconocida del Engine.");
-                break;
+            if (respuestaCentral.startsWith("STATUS#OK#")) {
+                averiaActiva = false;
+                System.out.println("Estacion recuperada correctamente.");
+            } else {
+                System.out.println(
+                        "CENTRAL no ha confirmado la recuperacion.");
             }
 
-            //Esperamos 1 seg antes de la siguiente comprob.
-            Thread.sleep(1000);
+        } catch (IOException e) {
+            System.out.println(
+                    "ERROR al notificar la recuperacion: "
+                    + e.getMessage());
+        }
+    }
+
+} else if (respuestaEngine.equals("KO")) {
+
+    System.out.println(
+            "ALERTA!! Averia detectada en la estacion " + idEstacion);
+
+    // Solo notificamos si aun no hay una averia registrada
+    if (!averiaActiva) {
+
+        String mensajeAveria =
+                "AVERIA#" + idEstacion + "#FUGA";
+
+        try (Socket socketCentral =
+                     new Socket(ipCentral, puertoCentral)) {
+
+            DataOutputStream salidaCentral =
+                    new DataOutputStream(socketCentral.getOutputStream());
+
+            DataInputStream entradaCentral =
+                    new DataInputStream(socketCentral.getInputStream());
+
+            socketCentral.setSoTimeout(3000);
+
+            salidaCentral.writeUTF(mensajeAveria);
+            salidaCentral.flush();
+
+            System.out.println(
+                    "Notificacion enviada: " + mensajeAveria);
+
+            String respuestaCentral = entradaCentral.readUTF();
+
+            System.out.println(
+                    "Respuesta de CENTRAL: " + respuestaCentral);
+
+            if (respuestaCentral.startsWith("STATUS#OK#")) {
+                averiaActiva = true;
+                System.out.println("Averia registrada en CENTRAL.");
+            } else {
+                System.out.println(
+                        "CENTRAL no ha confirmado la averia.");
+            }
+
+        } catch (IOException e) {
+            System.out.println(
+                    "ERROR al notificar la averia: "
+                    + e.getMessage());
+        }
+    }
+
+    } else {
+
+        System.out.println("ERROR: Respuesta desconocida del Engine.");
+        break;
+}
+        //Esperamos 1 seg antes de la siguiente comprobación
+        Thread.sleep(1000);
 
             } 
         }
