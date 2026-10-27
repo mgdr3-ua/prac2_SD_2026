@@ -44,6 +44,21 @@ public class ProductorKafka implements AutoCloseable {
         });
     }
 
+    // Envia una orden al motor de una estacion.
+    public void enviarOrdenEstacion(String idEstacion, String mensaje) {
+
+        ProducerRecord<String, String> registro =
+                new ProducerRecord<>("ordenes-estaciones", idEstacion, mensaje);
+
+        productor.send(registro, (resultado, error) -> {
+            if (error != null) {
+                System.err.println("[KAFKA] Error al enviar orden: "
+                        + error.getMessage());
+            } else {
+                System.out.println("[KAFKA] Orden enviada: " + mensaje);
+            }
+        });
+    }
     @Override
     public void close() {
         productor.close();
