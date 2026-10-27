@@ -10,8 +10,8 @@ public class WM_Central {
         System.out.println("=== WATER MANAGEMENT - CENTRAL ===");
 
         // Comprobamos que se haya indicado el puerto
-        if (args.length != 1) {
-            System.out.println("Uso: java WM_Central <puerto>");
+        if (args.length != 2) {
+            System.out.println("Uso: java WM_Central <puerto> <kafka>");
             return;
         }
 
@@ -23,8 +23,11 @@ public class WM_Central {
             System.out.println("ERROR: el puerto debe ser un numero.");
             return;
         }
+        // Direccion del servidor Kafka
+        String kafka = args[1];
 
         System.out.println("Puerto de escucha: " + puerto);
+        System.out.println("Kafka: " + kafka);
 
         // Inicializamos SQLite antes de aceptar conexiones de clientes.
         try {
