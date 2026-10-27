@@ -52,6 +52,12 @@ public class WM_Central {
         // mientras CENTRAL sigue atendiendo conexiones de las estaciones.
         MenuCentral menu = new MenuCentral();
         menu.start();
+        
+        // Iniciamos el consumidor Kafka en otro hilo
+        // para recibir solicitudes sin bloquear el servidor TCP.
+        ConsumidorKafka consumidorKafka = new ConsumidorKafka(kafka);
+        consumidorKafka.start();
+
         System.out.println("Esperando conexiones...");
         
         while (true) {
