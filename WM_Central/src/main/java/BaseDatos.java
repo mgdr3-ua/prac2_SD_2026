@@ -255,4 +255,25 @@ public class BaseDatos {
             sentencia.executeUpdate();
         }
     }
+
+    // Consulta el estado de una estacion.
+    // Devuelve null si la estacion no existe.
+    public static String obtenerEstadoEstacion(String id) throws SQLException {
+
+        String sql = "SELECT estado FROM estaciones WHERE id = ?";
+
+        try (Connection conexion = conectar();
+            PreparedStatement sentencia = conexion.prepareStatement(sql)) {
+
+            sentencia.setString(1, id);
+
+            try (ResultSet resultado = sentencia.executeQuery()) {
+                if (resultado.next()) {
+                    return resultado.getString("estado");
+                }
+            }
+        }
+
+        return null;
+    }
 }

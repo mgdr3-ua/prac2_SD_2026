@@ -93,8 +93,40 @@ public class ConsumidorKafka extends Thread {
                             continue;
                         }
 
-                        if (!BaseDatos.estacionDisponible(idEstacion)) {
-                            System.out.println("[KAFKA] Solicitud " + idSolicitud + " rechazada: estacion no disponible.");
+                        // Consultamos el estado real de la estacion.
+                        String estado = BaseDatos.obtenerEstadoEstacion(idEstacion);
+
+                        if (!"DISPONIBLE".equals(estado)) {
+
+                            String motivo;
+
+                            if (estado == null) {
+                                motivo = "NO_REGISTRADA";
+                            } else {
+                                switch (estado) {
+                                    case "FUERA_SERVICIO":
+                                        motivo = "BLOQUEADA";
+                                        break;
+                                    case "REGANDO":
+                                        motivo = "OCUPADA";
+                                        break;
+                                    case "FUGA":
+                                        motivo = "FUGA";
+                                        break;
+                                    case "DESCONECTADA":
+                                        motivo = "DESCONECTADA";
+                                        break;
+                                    default:
+                                        motivo = "ERROR";
+                                        break;
+                                }
+                            }
+
+                            System.out.println("[KAFKA] Solicitud " + idSolicitud + " rechazada: " + motivo);
+
+                            String respuesta = "RECHAZADA#" + idSolicitud + "#" + idOperario + "#" + idEstacion + "#" + motivo;
+
+                            productor.notificarOperario(idOperario, respuesta);
                             continue;
                         }
 
