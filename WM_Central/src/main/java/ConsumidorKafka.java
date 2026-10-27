@@ -82,6 +82,12 @@ public class ConsumidorKafka extends Thread {
                         continue;
                     }
 
+                    // Informamos al operario de que hemos recibido su solicitud.
+                    productor.notificarOperario(idOperario, "RECIBIDA#" + idSolicitud + "#" + idOperario + "#" + idEstacion);
+
+                    // Indicamos que CENTRAL empieza a comprobar la solicitud.
+                    productor.notificarOperario(idOperario,"VALIDANDO#" + idSolicitud + "#" + idOperario + "#" + idEstacion);
+                    
                     // Consultamos SQLite para validar la solicitud.
                     try {
                         if (!BaseDatos.operarioRegistrado(idOperario)) {
