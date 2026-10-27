@@ -34,7 +34,8 @@ public class ConsumidorKafka extends Thread {
         // Para esta primera prueba, leemos mensajes nuevos
         propiedades.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest");
 
-        try (KafkaConsumer<String, String> consumidor = new KafkaConsumer<>(propiedades)) {
+        try (KafkaConsumer<String, String> consumidor = new KafkaConsumer<>(propiedades);
+                ProductorKafka productor = new ProductorKafka(direccionKafka)){
 
             consumidor.subscribe(Collections.singletonList("solicitudes-riego"));
 
@@ -85,6 +86,10 @@ public class ConsumidorKafka extends Thread {
                     try {
                         if (!BaseDatos.operarioRegistrado(idOperario)) {
                             System.out.println("[KAFKA] Solicitud " + idSolicitud + " rechazada: operario no registrado.");
+
+                            String respuesta = "RECHAZADA#" + idSolicitud + "#" + idOperario + "#" + idEstacion + "#OPERARIO_INVALIDO";
+
+                            productor.notificarOperario(idOperario, respuesta);
                             continue;
                         }
 
