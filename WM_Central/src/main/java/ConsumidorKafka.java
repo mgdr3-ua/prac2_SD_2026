@@ -143,9 +143,9 @@ public class ConsumidorKafka extends Thread {
 
                         // Enviamos al motor la orden de iniciar el riego.
                         String orden = "INICIAR#" + idSolicitud + "#" + idEstacion + "#" + idOperario + "#" + duracion;
-
+                        SolicitudesActivas.guardar(idSolicitud, idOperario);
                         productor.enviarOrdenEstacion(idEstacion, orden);
-                        
+
                     } catch (SQLException e) {
                         System.err.println("[KAFKA] Error al consultar SQLite: " + e.getMessage());
                     }
