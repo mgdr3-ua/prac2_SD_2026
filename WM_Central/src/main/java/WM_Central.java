@@ -57,6 +57,9 @@ public class WM_Central {
         // para recibir solicitudes sin bloquear el servidor TCP.
         ConsumidorKafka consumidorKafka = new ConsumidorKafka(kafka);
         consumidorKafka.start();
+        // Escuchamos los eventos enviados por los motores de las estaciones.
+        ConsumidorEventosKafka consumidorEventos = new ConsumidorEventosKafka(kafka);
+        consumidorEventos.start();
 
         System.out.println("Esperando conexiones...");
         
