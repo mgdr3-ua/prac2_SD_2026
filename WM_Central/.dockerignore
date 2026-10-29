@@ -1,0 +1,9 @@
+.git/
+.vscode/
+.idea/
+target/
+*.class
+*.db
+*.db-*
+*.log
+lib/

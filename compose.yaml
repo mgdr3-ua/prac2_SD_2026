@@ -1,0 +1,149 @@
+name: watermanagement
+
+services:
+  broker:
+    image: apache/kafka:3.9.1
+    hostname: broker
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: "1"
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@broker:29093"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://broker:29092,CONTROLLER://broker:29093,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://broker:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
+      CLUSTER_ID: gTBb85_WRXu6oQgq-brTQw
+    volumes:
+      - kafka_data:/tmp/kraft-combined-logs
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"]
+      start_period: 30s
+      interval: 10s
+      timeout: 10s
+      retries: 12
+    restart: unless-stopped
+
+  kafka-init:
+    image: apache/kafka:3.9.1
+    depends_on:
+      broker:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-ec"]
+    command:
+      - |
+        for topic in solicitudes-riego ordenes-estaciones eventos-estaciones notificaciones-operarios; do
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server broker:29092 --create --if-not-exists --topic "$$topic" --partitions 1 --replication-factor 1;
+        done
+    restart: "no"
+
+  central:
+    image: wm-central:local
+    build:
+      context: ./WM_Central
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    ports:
+      - "6000:6000"
+    environment:
+      WM_OPERARIOS: OP-01,OP-02,ADMIN
+    volumes:
+      - central_data:/data
+    stdin_open: true
+    tty: true
+    command: ["WM_Central", "6000", "broker:29092"]
+    restart: unless-stopped
+
+  panel:
+    image: wm-central:local
+    depends_on:
+      central:
+        condition: service_started
+    volumes:
+      - central_data:/data
+    command: ["PanelCentral"]
+    tty: true
+    profiles: ["panel"]
+
+  monitor-ws01:
+    image: wm-monitor:local
+    build:
+      context: ./WM_WS_M
+    depends_on:
+      central:
+        condition: service_started
+    ports:
+      - "5001:5001"
+    command: ["5001", "central", "6000", "WS-01", "River Park"]
+    restart: unless-stopped
+
+  engine-ws01:
+    image: wm-engine:local
+    build:
+      context: ./WM_WS_E
+    depends_on:
+      monitor-ws01:
+        condition: service_started
+      kafka-init:
+        condition: service_completed_successfully
+    stdin_open: true
+    tty: true
+    command: ["broker:29092", "monitor-ws01", "5001"]
+    restart: unless-stopped
+
+  monitor-ws02:
+    image: wm-monitor:local
+    depends_on:
+      central:
+        condition: service_started
+    ports:
+      - "5002:5002"
+    command: ["5002", "central", "6000", "WS-02", "Parque Sur"]
+    restart: unless-stopped
+
+  engine-ws02:
+    image: wm-engine:local
+    depends_on:
+      monitor-ws02:
+        condition: service_started
+      kafka-init:
+        condition: service_completed_successfully
+    stdin_open: true
+    tty: true
+    command: ["broker:29092", "monitor-ws02", "5002"]
+    restart: unless-stopped
+
+  fo-01:
+    image: wm-fo:local
+    build:
+      context: ./WM_FO
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    stdin_open: true
+    tty: true
+    command: ["broker:29092", "OP-01"]
+    profiles: ["operarios"]
+
+  fo-02:
+    image: wm-fo:local
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    stdin_open: true
+    tty: true
+    command: ["broker:29092", "OP-02"]
+    profiles: ["operarios"]
+
+volumes:
+  central_data:
+  kafka_data:
