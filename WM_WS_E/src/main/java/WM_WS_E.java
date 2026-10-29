@@ -17,21 +17,27 @@ public class WM_WS_E {
         String brokerKafka = "localhost:9092";
         String idEstacion = "WS-01";
 
-        // Datos de conexion con el monitor
+        // Datos de conexion del monitor
         String ipMonitor = "localhost";
         int puertoMonitor = 5001;
 
-        // Estado compartido de averia
+        // Variable compartida para detectar averias
         AtomicBoolean averia = new AtomicBoolean(false);
 
-        // Motor encargado de ejecutar los riegos
+        // Creamos el motor encargado del riego
         MotorRiego motor = new MotorRiego(
-                brokerKafka, idEstacion, averia
+                brokerKafka,
+                idEstacion,
+                averia
         );
 
-        // Hilo que recibe las ordenes desde Kafka
+        // Iniciamos el consumidor Kafka en otro hilo
         Thread hiloKafka = new Thread(
-                new ConsumidorKafka(brokerKafka, idEstacion, motor)
+                new ConsumidorKafka(
+                        brokerKafka,
+                        idEstacion,
+                        motor
+                )
         );
 
         hiloKafka.setName("Kafka-Consumer-" + idEstacion);
@@ -43,22 +49,37 @@ public class WM_WS_E {
         // Conexion TCP con el monitor
         try (Socket socket = new Socket(ipMonitor, puertoMonitor)) {
 
-            System.out.println("Conexion establecida con WM_WS_M.");
-            System.out.println("Monitor: " + ipMonitor + ":" + puertoMonitor);
+            System.out.println(
+                    "Conexion establecida con WM_WS_M."
+            );
 
+            System.out.println(
+                    "Monitor: " + ipMonitor + ":" + puertoMonitor
+            );
+
+            // Flujos de comunicacion TCP
             DataInputStream entrada =
                     new DataInputStream(socket.getInputStream());
 
             DataOutputStream salida =
                     new DataOutputStream(socket.getOutputStream());
 
-            // Hilo independiente para simular y resolver fugas
+            // Hilo para leer las teclas del usuario
             Thread teclado = new Thread(() -> {
 
                 Scanner scanner = new Scanner(System.in);
 
-                System.out.println("Pulsa F + Enter para simular una fuga.");
-                System.out.println("Pulsa R + Enter para resolver la fuga.");
+                System.out.println(
+                        "Pulsa F + Enter para simular una fuga."
+                );
+
+                System.out.println(
+                        "Pulsa R + Enter para resolver la fuga."
+                );
+
+                System.out.println(
+                        "Pulsa P + Enter para parar el riego."
+                );
 
                 while (scanner.hasNextLine()) {
 
@@ -66,7 +87,7 @@ public class WM_WS_E {
 
                     if (opcion.equalsIgnoreCase("F")) {
 
-                        // Simulamos una averia
+                        // Activamos la simulacion de fuga
                         averia.set(true);
 
                         System.out.println(
@@ -75,11 +96,22 @@ public class WM_WS_E {
 
                     } else if (opcion.equalsIgnoreCase("R")) {
 
-                        // Resolvemos la averia
+                        // Resolvemos la fuga
                         averia.set(false);
 
                         System.out.println(
-                                "RECUPERACION: Fuga resuelta correctamente."
+                                "RECUPERACION: Fuga resuelta."
+                        );
+
+                    } else if (opcion.equalsIgnoreCase("P")) {
+
+                        // Paramos el riego actual
+                        motor.pararActual();
+
+                    } else {
+
+                        System.out.println(
+                                "Opcion desconocida. Usa F, R o P."
                         );
                     }
                 }
@@ -88,7 +120,7 @@ public class WM_WS_E {
             teclado.setDaemon(true);
             teclado.start();
 
-            // Respondemos continuamente a las comprobaciones del monitor
+            // Atendemos las comprobaciones del monitor
             while (true) {
 
                 String mensaje = entrada.readUTF();
@@ -101,19 +133,23 @@ public class WM_WS_E {
 
                     if (averia.get()) {
 
-                        // Hay una fuga
+                        // En caso de fuga respondemos KO
                         salida.writeUTF("KO");
                         salida.flush();
 
-                        System.out.println("Respuesta enviada: KO");
+                        System.out.println(
+                                "Respuesta enviada: KO"
+                        );
 
                     } else {
 
-                        // La estacion funciona correctamente
+                        // Si funciona bien respondemos OK
                         salida.writeUTF("OK");
                         salida.flush();
 
-                        System.out.println("Respuesta enviada: OK");
+                        System.out.println(
+                                "Respuesta enviada: OK"
+                        );
                     }
 
                 } else {
@@ -129,7 +165,10 @@ public class WM_WS_E {
             System.out.println(
                     "ERROR: comunicacion con WM_WS_M."
             );
-            System.out.println("Motivo: " + e.getMessage());
+
+            System.out.println(
+                    "Motivo: " + e.getMessage()
+            );
         }
     }
 }
