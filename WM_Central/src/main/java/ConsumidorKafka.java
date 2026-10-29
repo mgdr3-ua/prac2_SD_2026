@@ -143,9 +143,31 @@ public class ConsumidorKafka extends Thread {
 
                         // Enviamos al motor la orden de iniciar el riego.
                         String orden = "INICIAR#" + idSolicitud + "#" + idEstacion + "#" + idOperario + "#" + duracion;
-                        SolicitudesActivas.guardar(idSolicitud, idOperario);
-                        productor.enviarOrdenEstacion(idEstacion, orden);
+                                                
+                        // Intentamos reservar la estacion para esta solicitud
+                        if (!SolicitudesActivas.guardar(idSolicitud, idOperario, idEstacion)) {
 
+                            String motivo;
+
+                            // Comprobamos por que no se ha podido guardar
+                            if (SolicitudesActivas.obtenerOperario(idSolicitud) != null) {
+                                motivo = "ERROR";
+                                System.out.println("[CENTRAL] Solicitud duplicada: " + idSolicitud);
+                            } else {
+                                motivo = "OCUPADA";
+                                System.out.println("[CENTRAL] Estacion ocupada: " + idEstacion);
+                            }
+
+                            String notificacion = "RECHAZADA#" + idSolicitud + "#" + idOperario
+                                    + "#" + idEstacion + "#" + motivo;
+
+                            productor.notificarOperario(idOperario, notificacion);
+                            continue;
+                        }
+
+                        // Si es nueva, enviamos la orden al motor
+                        productor.enviarOrdenEstacion(idEstacion, orden);
+                    
                     } catch (SQLException e) {
                         System.err.println("[KAFKA] Error al consultar SQLite: " + e.getMessage());
                     }

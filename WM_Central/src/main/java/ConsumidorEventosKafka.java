@@ -48,13 +48,19 @@ public class ConsumidorEventosKafka extends Thread {
                     String[] campos = mensaje.value().split("#", -1);
 
                     if (campos.length == 4 && campos[0].equals("INICIADO")) {
+                        String idSolicitud = campos[1];
                         String idEstacion = campos[2];
+                        String idOperario = campos[3];
+
+                        // Comprobamos que CENTRAL haya validado esta solicitud
+                        if (!SolicitudesActivas.esValida(idSolicitud, idOperario, idEstacion)) {
+                            System.out.println("[CENTRAL] Evento INICIADO ignorado: solicitud no valida.");
+                            continue;
+                        }
 
                         try {
                             BaseDatos.actualizarEstado(idEstacion, "REGANDO");
                             System.out.println("[CENTRAL] Estacion " + idEstacion + " en estado REGANDO.");
-                            String idSolicitud = campos[1];
-                            String idOperario = campos[3];
 
                             String notificacion = "ACEPTADA#" + idSolicitud + "#" + idOperario + "#" + idEstacion;
 
@@ -74,13 +80,12 @@ public class ConsumidorEventosKafka extends Thread {
 
                         // Buscamos el operario que hizo la solicitud
                         String idOperario = SolicitudesActivas.obtenerOperario(idSolicitud);
-
-                        if (idOperario != null) {
+                        
+                        // Comprobamos que la solicitud pertenece a esta estacion
+                        if (idOperario != null && SolicitudesActivas.esValida(idSolicitud, idOperario, idEstacion) && "REGANDO".equals(BaseDatos.obtenerEstadoEstacion(idEstacion))) {
 
                             // Enviamos al operario los datos del riego
-                            String notificacion = "PROGRESO#" + idSolicitud + "#"
-                                    + idOperario + "#" + idEstacion + "#"
-                                    + caudal + "#" + volumen + "#" + tiempo;
+                            String notificacion = "PROGRESO#" + idSolicitud + "#" + idOperario + "#" + idEstacion + "#" + caudal + "#" + volumen + "#" + tiempo;
 
                             productor.notificarOperario(idOperario, notificacion);
 
@@ -92,8 +97,16 @@ public class ConsumidorEventosKafka extends Thread {
                     
                     } else if (campos.length == 7 && campos[0].equals("FINALIZADO")) {
 
+                        String idSolicitud = campos[1];
                         String idEstacion = campos[2];
+                        String idOperario = campos[3];
                         String motivo = campos[4];
+
+                        // Comprobamos que la solicitud pertenece al operario y a la estacion
+                        if (!SolicitudesActivas.esValida(idSolicitud, idOperario, idEstacion)) {
+                            System.out.println("[CENTRAL] Evento FINALIZADO ignorado: solicitud no valida.");
+                            continue;
+                        }
 
                         try {
                             String estadoActual = BaseDatos.obtenerEstadoEstacion(idEstacion);
@@ -107,16 +120,10 @@ public class ConsumidorEventosKafka extends Thread {
 
                                 System.out.println("[CENTRAL] Riego finalizado en " + idEstacion);
 
-                                // Buscamos el operario que hizo la solicitud
-                                String idSolicitud = campos[1];
-                                String idOperario = SolicitudesActivas.obtenerOperario(idSolicitud);
-
                                 if (idOperario != null) {
 
                                     // Avisamos al operario de que el riego ha terminado
-                                    String notificacion = "FINALIZADA#" + idSolicitud + "#"
-                                            + idOperario + "#" + idEstacion + "#"
-                                            + motivo + "#" + campos[5] + "#" + campos[6];
+                                    String notificacion = "FINALIZADA#" + idSolicitud + "#" + idOperario + "#" + idEstacion + "#" + motivo + "#" + campos[5] + "#" + campos[6];
 
                                     productor.notificarOperario(idOperario, notificacion);
 
