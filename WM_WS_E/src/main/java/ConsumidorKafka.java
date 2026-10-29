@@ -13,44 +13,70 @@ public class ConsumidorKafka implements Runnable {
 
     private final String broker;
     private final String idEstacion;
+    private final MotorRiego motor;
 
-    public ConsumidorKafka(String broker, String idEstacion) {
+    // Constructor
+    public ConsumidorKafka(String broker, String idEstacion,
+                           MotorRiego motor) {
+
         this.broker = broker;
         this.idEstacion = idEstacion;
+        this.motor = motor;
     }
 
     @Override
     public void run() {
 
-        // Configuracion del consumidor Kafka
         Properties props = new Properties();
 
-        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, broker);
+        // Direccion del broker Kafka
+        props.put(
+                ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
+                broker
+        );
 
-        // Cada estacion tiene su propio grupo de consumidores
-        props.put(ConsumerConfig.GROUP_ID_CONFIG, "engine-" + idEstacion);
+        // Cada estacion tiene su propio grupo
+        props.put(
+                ConsumerConfig.GROUP_ID_CONFIG,
+                "engine-" + idEstacion
+        );
 
-        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG,
-                StringDeserializer.class.getName());
+        // Los mensajes se reciben como cadenas de texto
+        props.put(
+                ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG,
+                StringDeserializer.class.getName()
+        );
 
-        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
-                StringDeserializer.class.getName());
+        props.put(
+                ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
+                StringDeserializer.class.getName()
+        );
 
-        // En una primera ejecucion, leer solo mensajes nuevos
-        props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest");
+        props.put(
+                ConsumerConfig.AUTO_OFFSET_RESET_CONFIG,
+                "latest"
+        );
 
-        props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
+        props.put(
+                ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG,
+                false
+        );
 
         try (KafkaConsumer<String, String> consumer =
                      new KafkaConsumer<>(props)) {
 
-            // Escuchamos las ordenes enviadas desde CENTRAL
-            consumer.subscribe(Collections.singletonList("ordenes-estaciones"));
+            // Topic del que recibimos las ordenes
+            consumer.subscribe(
+                    Collections.singletonList("ordenes-estaciones")
+            );
 
             System.out.println("Consumidor Kafka iniciado.");
             System.out.println("Broker: " + broker);
-            System.out.println("Escuchando ordenes para: " + idEstacion);
+            System.out.println(
+                    "Escuchando ordenes para: " + idEstacion
+            );
 
+            // Esperamos ordenes continuamente
             while (!Thread.currentThread().isInterrupted()) {
 
                 ConsumerRecords<String, String> mensajes =
@@ -59,35 +85,129 @@ public class ConsumidorKafka implements Runnable {
                 for (ConsumerRecord<String, String> mensaje : mensajes) {
 
                     String contenido = mensaje.value();
+
+                    // Separamos los campos del mensaje
                     String[] partes = contenido.split("#", -1);
 
-                    // Todas las ordenes tienen el ID de estacion
-                    // en la tercera posicion
                     if (partes.length < 3) {
-                        System.out.println("Orden mal formada: " + contenido);
+
+                        System.out.println(
+                                "Orden incorrecta: " + contenido
+                        );
                         continue;
                     }
 
+                    // Ignoramos las ordenes de otras estaciones
                     if (!partes[2].equals(idEstacion)) {
                         continue;
                     }
 
-                    System.out.println("Orden Kafka recibida: " + contenido);
+                    System.out.println(
+                            "Orden Kafka recibida: " + contenido
+                    );
 
-                    // De momento solo mostramos la orden.
-                    // Despues implementaremos INICIAR, PARAR,
-                    // BLOQUEAR y ACTIVAR.
+                    try {
+
+                        switch (partes[0]) {
+
+                            case "INICIAR":
+
+                                // INICIAR#solicitud#estacion#operario#duracion
+                                if (partes.length != 5) {
+                                    System.out.println(
+                                            "Formato INICIAR incorrecto."
+                                    );
+                                    break;
+                                }
+
+                                String idSolicitud = partes[1];
+                                String idOperario = partes[3];
+                                int duracion =
+                                        Integer.parseInt(partes[4]);
+
+                                motor.iniciar(
+                                        idSolicitud,
+                                        idOperario,
+                                        duracion
+                                );
+
+                                break;
+
+                            case "PARAR":
+
+                                // PARAR#solicitud#estacion
+                                if (partes.length != 3) {
+                                    System.out.println(
+                                            "Formato PARAR incorrecto."
+                                    );
+                                    break;
+                                }
+
+                                motor.parar(partes[1]);
+
+                                break;
+
+                            case "BLOQUEAR":
+
+                                // BLOQUEAR#administracion#estacion
+                                if (partes.length != 3) {
+                                    System.out.println(
+                                            "Formato BLOQUEAR incorrecto."
+                                    );
+                                    break;
+                                }
+
+                                motor.bloquear(partes[1]);
+
+                                break;
+
+                            case "ACTIVAR":
+
+                                // ACTIVAR#administracion#estacion
+                                if (partes.length != 3) {
+                                    System.out.println(
+                                            "Formato ACTIVAR incorrecto."
+                                    );
+                                    break;
+                                }
+
+                                motor.activar(partes[1]);
+
+                                break;
+
+                            default:
+
+                                System.out.println(
+                                        "Orden desconocida: " + partes[0]
+                                );
+
+                                break;
+                        }
+
+                    } catch (NumberFormatException e) {
+
+                        System.out.println(
+                                "ERROR: duracion incorrecta en " + contenido
+                        );
+
+                    } catch (Exception e) {
+
+                        System.err.println(
+                                "ERROR al procesar orden: " + e.getMessage()
+                        );
+                    }
                 }
 
-                // Confirmamos los mensajes leidos durante la prueba
+                // Confirmamos los mensajes procesados
                 if (!mensajes.isEmpty()) {
                     consumer.commitSync();
                 }
             }
 
         } catch (Exception e) {
-    System.out.println("ERROR en consumidor Kafka:");
-    e.printStackTrace();
-}
+
+            System.err.println("ERROR en consumidor Kafka:");
+            e.printStackTrace();
+        }
     }
 }

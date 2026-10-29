@@ -1,27 +1,37 @@
+
 import java.net.Socket;
 import java.io.IOException;
-
 import java.io.DataOutputStream;
 import java.io.DataInputStream;
-
 import java.util.Scanner;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public class WM_WS_E{
+public class WM_WS_E {
 
-    public static void main(String[] args){
+    public static void main(String[] args) {
 
         System.out.println(" --- WATER MANAGER --- ");
-        System.out.println("MÓDULO: Engine de estación (WM_WS_E)");
+        System.out.println("MODULO: Engine de estacion (WM_WS_E)");
 
-        
-        // Configuracion provisional de Kafka y la estacion
+        // Configuracion de Kafka y de la estacion
         String brokerKafka = "localhost:9092";
         String idEstacion = "WS-01";
 
-        // Iniciamos el consumidor Kafka en un hilo independiente
+        // Datos de conexion con el monitor
+        String ipMonitor = "localhost";
+        int puertoMonitor = 5001;
+
+        // Estado compartido de averia
+        AtomicBoolean averia = new AtomicBoolean(false);
+
+        // Motor encargado de ejecutar los riegos
+        MotorRiego motor = new MotorRiego(
+                brokerKafka, idEstacion, averia
+        );
+
+        // Hilo que recibe las ordenes desde Kafka
         Thread hiloKafka = new Thread(
-                new ConsumidorKafka(brokerKafka, idEstacion)
+                new ConsumidorKafka(brokerKafka, idEstacion, motor)
         );
 
         hiloKafka.setName("Kafka-Consumer-" + idEstacion);
@@ -30,95 +40,96 @@ public class WM_WS_E{
 
         System.out.println("Hilo consumidor Kafka iniciado.");
 
+        // Conexion TCP con el monitor
+        try (Socket socket = new Socket(ipMonitor, puertoMonitor)) {
 
-        //Datos de conexión del monitor
-        String ipMonitor = "localhost";
-        int puertoMonitor = 5001;
-
-        //Intentamos establecer una conexión TCP
-        try(Socket socket = new Socket(ipMonitor,puertoMonitor)){
-
-            System.out.println("Conexión establecida con WM_WS_M.");
+            System.out.println("Conexion establecida con WM_WS_M.");
             System.out.println("Monitor: " + ipMonitor + ":" + puertoMonitor);
 
-            //Creamos los flujos de comunicación
-            DataInputStream entrada = 
-                new DataInputStream(socket.getInputStream());
+            DataInputStream entrada =
+                    new DataInputStream(socket.getInputStream());
 
             DataOutputStream salida =
-                new DataOutputStream(socket.getOutputStream());
+                    new DataOutputStream(socket.getOutputStream());
 
-            
-
-            // Variable compartida que indica si hay una averia
-            AtomicBoolean averia = new AtomicBoolean(false);
-
-            // Hilo independiente para detectar las teclas del usuario
+            // Hilo independiente para simular y resolver fugas
             Thread teclado = new Thread(() -> {
 
                 Scanner scanner = new Scanner(System.in);
 
-                System.out.println("Pulsa F + enter para simular una fuga.");
-                System.out.println("Pulsa R + enter para resolver la fuga.");
+                System.out.println("Pulsa F + Enter para simular una fuga.");
+                System.out.println("Pulsa R + Enter para resolver la fuga.");
 
-                while (true) {
-                    
+                while (scanner.hasNextLine()) {
+
                     String opcion = scanner.nextLine();
 
-                    if(opcion.equalsIgnoreCase("F")){
+                    if (opcion.equalsIgnoreCase("F")) {
 
-                        //Activamos la simulación de fuga
+                        // Simulamos una averia
                         averia.set(true);
-                        System.out.println("AVERIA SIMULADA: Fuga detectada");
-                }else if(opcion.equalsIgnoreCase("R")){
 
-                    //REsolvemos la averia simulada
-                    averia.set(false);
+                        System.out.println(
+                                "AVERIA SIMULADA: Fuga detectada."
+                        );
 
-                    System.out.println("RECUPERACIÓN: Fuga resuelta correctamente.");
+                    } else if (opcion.equalsIgnoreCase("R")) {
+
+                        // Resolvemos la averia
+                        averia.set(false);
+
+                        System.out.println(
+                                "RECUPERACION: Fuga resuelta correctamente."
+                        );
+                    }
                 }
-            }
-        });
+            });
 
-        teclado.setDaemon(true);
-        teclado.start();
+            teclado.setDaemon(true);
+            teclado.start();
 
-
+            // Respondemos continuamente a las comprobaciones del monitor
             while (true) {
 
-                //ESperamos el mensaje del monitor
                 String mensaje = entrada.readUTF();
 
-            System.out.println("Mensaje recibido del Monitor: " + mensaje);
+                System.out.println(
+                        "Mensaje recibido del Monitor: " + mensaje
+                );
 
-            if (mensaje.equals("PING")) {
+                if (mensaje.equals("PING")) {
 
-                if(averia.get()){
+                    if (averia.get()) {
 
-                    //Si esxiste una averia -> respondemos KO
-                    salida.writeUTF("KO");
-                    salida.flush();
+                        // Hay una fuga
+                        salida.writeUTF("KO");
+                        salida.flush();
 
-                    System.out.println("Respuesta enviada: KO");
-                }else{
-                    //Si todo funciona -> REspondemos OK     
-                    salida.writeUTF("OK");
-                    salida.flush();
+                        System.out.println("Respuesta enviada: KO");
 
-                    System.out.println("Respuesta enviada: OK");
+                    } else {
+
+                        // La estacion funciona correctamente
+                        salida.writeUTF("OK");
+                        salida.flush();
+
+                        System.out.println("Respuesta enviada: OK");
+                    }
+
+                } else {
+
+                    System.out.println(
+                            "Mensaje desconocido: " + mensaje
+                    );
                 }
-
-            }else{
-
-                System.out.println("Mensaje desconocido: " + mensaje);
             }
-        
-        }
-    } catch (IOException e){
 
-        System.out.println("ERROR: comunicación con WM_WS_M.");
-        System.out.println("Motivo: " + e.getMessage());
-        
+        } catch (IOException e) {
+
+            System.out.println(
+                    "ERROR: comunicacion con WM_WS_M."
+            );
+            System.out.println("Motivo: " + e.getMessage());
         }
     }
 }
