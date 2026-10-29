@@ -14,6 +14,23 @@ public class WM_WS_E{
         System.out.println(" --- WATER MANAGER --- ");
         System.out.println("MÓDULO: Engine de estación (WM_WS_E)");
 
+        
+        // Configuracion provisional de Kafka y la estacion
+        String brokerKafka = "localhost:9092";
+        String idEstacion = "WS-01";
+
+        // Iniciamos el consumidor Kafka en un hilo independiente
+        Thread hiloKafka = new Thread(
+                new ConsumidorKafka(brokerKafka, idEstacion)
+        );
+
+        hiloKafka.setName("Kafka-Consumer-" + idEstacion);
+        hiloKafka.setDaemon(true);
+        hiloKafka.start();
+
+        System.out.println("Hilo consumidor Kafka iniciado.");
+
+
         //Datos de conexión del monitor
         String ipMonitor = "localhost";
         int puertoMonitor = 5001;

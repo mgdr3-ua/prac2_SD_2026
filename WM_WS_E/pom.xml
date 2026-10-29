@@ -5,34 +5,56 @@
 
     <modelVersion>4.0.0</modelVersion>
 
-    <!-- Identifica el proyecto Java -->
+    <!-- Identificacion del proyecto -->
     <groupId>es.ua.watermanagement</groupId>
-
-    <!-- Identifica el modulo WM_WS_E -->
     <artifactId>wm-ws-e</artifactId>
-
-    <!-- Version de nuestro modulo -->
     <version>1.0-SNAPSHOT</version>
 
     <properties>
-        <!-- Compila para Java 17 -->
+        <!-- Compatibilidad con Java 17 o superior -->
         <maven.compiler.release>17</maven.compiler.release>
-
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
     <dependencies>
 
-        <!-- Cliente Java para comunicarse con Kafka -->
+        <!-- Cliente Kafka para productores y consumidores -->
         <dependency>
             <groupId>org.apache.kafka</groupId>
-
-            <!-- Biblioteca para crear productores y consumidores Kafka en Java -->
             <artifactId>kafka-clients</artifactId>
+            <version>3.9.1</version>
+        </dependency>
 
-            <version>4.1.1</version>
+        <!-- Sistema de logs compatible con Kafka -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-simple</artifactId>
+            <version>1.7.36</version>
         </dependency>
 
     </dependencies>
+
+    <build>
+        <plugins>
+
+            <!-- Compilador Java -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.14.0</version>
+            </plugin>
+
+            <!-- Ejecucion de WM_WS_E -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.5.0</version>
+                <configuration>
+                    <mainClass>WM_WS_E</mainClass>
+                </configuration>
+            </plugin>
+
+        </plugins>
+    </build>
 
 </project>
