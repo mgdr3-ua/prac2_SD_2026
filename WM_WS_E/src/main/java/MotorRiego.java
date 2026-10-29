@@ -1,5 +1,7 @@
 import java.util.Locale;
 import java.util.Properties;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.kafka.clients.producer.KafkaProducer;
@@ -7,286 +9,147 @@ import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.StringSerializer;
 
-public class MotorRiego {
-
+public class MotorRiego implements AutoCloseable {
     private final String idEstacion;
     private final AtomicBoolean averia;
     private final KafkaProducer<String, String> productor;
+    private final double caudal = 12.0; // litros por minuto, valor de simulacion
 
-    private volatile boolean bloqueada = false;
-    private volatile boolean detener = false;
-    private volatile boolean regando = false;
+    private volatile boolean bloqueada;
+    private volatile boolean regando;
+    private volatile String causaParada;
+    private volatile Thread hiloRiegoActual;
+    private String solicitudActual;
 
-    private String solicitudActual = null;
-
-    // Caudal simulado en litros por minuto
-    private final double caudal = 12.0;
-
-    public MotorRiego(String broker, String idEstacion,
-                      AtomicBoolean averia) {
-
+    public MotorRiego(String broker, String idEstacion, AtomicBoolean averia) {
         this.idEstacion = idEstacion;
         this.averia = averia;
-
-        Properties props = new Properties();
-
-        props.put(
-                ProducerConfig.BOOTSTRAP_SERVERS_CONFIG,
-                broker
-        );
-
-        props.put(
-                ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG,
-                StringSerializer.class.getName()
-        );
-
-        props.put(
-                ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG,
-                StringSerializer.class.getName()
-        );
-
-        props.put(ProducerConfig.ACKS_CONFIG, "all");
-
-        productor = new KafkaProducer<>(props);
+        Properties p = new Properties();
+        p.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, broker);
+        p.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+        p.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+        p.put(ProducerConfig.ACKS_CONFIG, "all");
+        productor = new KafkaProducer<>(p);
     }
 
-    // Publica los eventos del motor en Kafka
     private void publicar(String mensaje) {
-
-        productor.send(
-                new ProducerRecord<>(
-                        "eventos-estaciones",
-                        idEstacion,
-                        mensaje
-                ),
-                (metadata, error) -> {
-                    if (error != null) {
-                        System.err.println(
-                                "Error Kafka: " + error.getMessage()
-                        );
-                    }
-                }
-        );
-
+        productor.send(new ProducerRecord<>("eventos-estaciones", idEstacion, mensaje),
+                (meta, error) -> {
+                    if (error != null) System.err.println("[ENGINE] Error Kafka: " + error.getMessage());
+                });
         System.out.println("[RIEGO] " + mensaje);
     }
 
-    // Inicia el riego si la estacion esta disponible
-    public synchronized void iniciar(String idSolicitud,
-                                     String idOperario,
-                                     int duracion) {
-
-        String motivo = null;
-
-        if (averia.get()) {
-            motivo = "FUGA";
-        } else if (bloqueada) {
-            motivo = "BLOQUEADA";
-        } else if (regando) {
-            motivo = "OCUPADA";
-        } else if (duracion <= 0) {
-            motivo = "ERROR";
+    // Una peticion local NO abre directamente la valvula: CENTRAL debe autorizarla.
+    public void solicitarRiego(String idOperario, int duracion) throws Exception {
+        if (idOperario.isBlank() || duracion <= 0) {
+            throw new IllegalArgumentException("Operario o duracion incorrecta");
         }
-
-        // Rechazamos el riego si hay algun problema
-        if (motivo != null) {
-
-            publicar(
-                    "RECHAZADO#" + idSolicitud + "#"
-                    + idEstacion + "#" + motivo
-            );
-
-            return;
-        }
-
-        regando = true;
-        detener = false;
-        solicitudActual = idSolicitud;
-
-        // Ejecutamos el riego en otro hilo
-        Thread hiloRiego = new Thread(
-                () -> ejecutarRiego(
-                        idSolicitud,
-                        idOperario,
-                        duracion
-                )
-        );
-
-        hiloRiego.setName("Riego-" + idEstacion);
-        hiloRiego.start();
+        String id = "SOL-" + UUID.randomUUID().toString().substring(0, 8);
+        String solicitud = "SOLICITAR#" + id + "#" + idOperario + "#" + idEstacion + "#" + duracion;
+        productor.send(new ProducerRecord<>("solicitudes-riego", idOperario, solicitud))
+                .get(10, TimeUnit.SECONDS);
+        System.out.println("[ENGINE] Solicitud enviada a CENTRAL: " + solicitud);
     }
 
-    // Simula el riego segundo a segundo
-    private void ejecutarRiego(String idSolicitud,
-                               String idOperario,
-                               int duracion) {
+    public synchronized void iniciar(String idSolicitud, String idOperario, int duracion) {
+        String motivo = averia.get() ? "FUGA" : bloqueada ? "BLOQUEADA" :
+                regando ? "OCUPADA" : duracion <= 0 ? "ERROR" : null;
+        if (motivo != null) {
+            publicar("RECHAZADO#" + idSolicitud + "#" + idEstacion + "#" + motivo);
+            return;
+        }
+        regando = true;
+        causaParada = null;
+        solicitudActual = idSolicitud;
+        Thread hilo = new Thread(() -> ejecutarRiego(idSolicitud, idOperario, duracion),
+                "Riego-" + idEstacion);
+        hiloRiegoActual = hilo;
+        hilo.start();
+    }
 
+    private void ejecutarRiego(String solicitud, String operario, int duracion) {
         int segundos = 0;
-        double volumen = 0.0;
+        double volumen = 0;
         String motivo = "TIEMPO";
-
-        // Avisamos de que empieza el riego
-        publicar(
-                "INICIADO#" + idSolicitud + "#"
-                + idEstacion + "#" + idOperario
-        );
-
+        publicar("INICIADO#" + solicitud + "#" + idEstacion + "#" + operario);
         try {
-
             while (segundos < duracion) {
-
-                // Comprobamos si existe una fuga
-                if (averia.get()) {
-                    motivo = "FUGA";
-                    break;
-                }
-
-                // Comprobamos si la estacion esta bloqueada
-                if (bloqueada) {
-                    motivo = "BLOQUEO";
-                    break;
-                }
-
-                // Comprobamos si se ha solicitado parar
-                if (detener) {
-                    motivo = "MANUAL";
-                    break;
-                }
-
+                if (averia.get() || causaParada != null) break;
                 Thread.sleep(1000);
-
-                // Si ha ocurrido algo durante la espera,
-                // evitamos contar un segundo mas de riego
-                if (averia.get() || bloqueada || detener) {
-                    continue;
-                }
-
+                if (averia.get() || causaParada != null) break;
                 segundos++;
-
-                // Volumen = caudal * tiempo / 60
                 volumen = caudal * segundos / 60.0;
-
-                String progreso = String.format(
-                        Locale.US,
-                        "PROGRESO#%s#%s#%.2f#%.2f#%d",
-                        idSolicitud,
-                        idEstacion,
-                        caudal,
-                        volumen,
-                        segundos
-                );
-
-                publicar(progreso);
+                publicar(String.format(Locale.US, "PROGRESO#%s#%s#%.2f#%.2f#%d",
+                        solicitud, idEstacion, caudal, volumen, segundos));
             }
-
-            // Determinamos el motivo final
-            if (averia.get()) {
-                motivo = "FUGA";
-            } else if (bloqueada) {
-                motivo = "BLOQUEO";
-            } else if (detener) {
-                motivo = "MANUAL";
-            }
-
         } catch (InterruptedException e) {
-
-            Thread.currentThread().interrupt();
-            motivo = "MANUAL";
-
+            // Interrupcion intencionada: parada/fuga/bloqueo inmediata.
         } finally {
-
-            // Publicamos los datos finales del riego
-            String finalizado = String.format(
-                    Locale.US,
-                    "FINALIZADO#%s#%s#%s#%s#%d#%.2f",
-                    idSolicitud,
-                    idEstacion,
-                    idOperario,
-                    motivo,
-                    segundos,
-                    volumen
-            );
-
-            publicar(finalizado);
-
-            // Dejamos el motor preparado para otro riego
+            if (averia.get()) motivo = "FUGA";
+            else if (causaParada != null) motivo = causaParada;
+            publicar(String.format(Locale.US, "FINALIZADO#%s#%s#%s#%s#%d#%.2f",
+                    solicitud, idEstacion, operario, motivo, segundos, volumen));
             synchronized (this) {
                 regando = false;
                 solicitudActual = null;
-                detener = false;
+                causaParada = null;
+                hiloRiegoActual = null;
             }
         }
     }
 
-    // Detiene el riego indicado mediante una orden Kafka
-    public synchronized void parar(String idSolicitud) {
+    private synchronized void solicitarParada(String motivo) {
+        if (!regando) return;
+        // La fuga tiene prioridad; una parada por bloqueo no puede perderse por ACTIVAR.
+        if (!"BLOQUEO".equals(causaParada)) causaParada = motivo;
+        Thread hilo = hiloRiegoActual;
+        if (hilo != null) hilo.interrupt();
+    }
 
-        if (regando && idSolicitud.equals(solicitudActual)) {
-
-            detener = true;
-
-            System.out.println(
-                    "[RIEGO] Parada solicitada desde Kafka: "
-                    + idSolicitud
-            );
-
-        } else {
-
-            System.out.println(
-                    "[RIEGO] No hay un riego activo con ID: "
-                    + idSolicitud
-            );
+    public void parar(String idSolicitud) {
+        synchronized (this) {
+            if (regando && idSolicitud.equals(solicitudActual)) solicitarParada("MANUAL");
         }
     }
 
-    // NUEVO: detiene manualmente el riego con la tecla P
-    public synchronized void pararActual() {
-
-        if (regando) {
-
-            detener = true;
-
-            System.out.println(
-                    "[RIEGO] Parada manual solicitada: "
-                    + solicitudActual
-            );
-
-        } else {
-
-            System.out.println(
-                    "[RIEGO] No hay ningun riego activo."
-            );
+    public void pararActual() {
+        if (!regando) {
+            System.out.println("[RIEGO] No hay riego activo.");
+            return;
         }
+        solicitarParada("MANUAL");
+        System.out.println("[RIEGO] Parada manual solicitada.");
     }
 
-    // Bloquea la estacion e impide nuevos riegos
-    public void bloquear(String idAdministracion) {
+    public void notificarFuga() {
+        averia.set(true);
+        solicitarParada("FUGA");
+    }
 
+    public synchronized void bloquear(String idAdministracion) {
         bloqueada = true;
-
-        publicar(
-                "BLOQUEADA#" + idAdministracion
-                + "#" + idEstacion
-        );
+        solicitarParada("BLOQUEO");
+        publicar("BLOQUEADA#" + idAdministracion + "#" + idEstacion);
     }
 
-    // Activa una estacion si no tiene averias
-    public void activar(String idAdministracion) {
-
-        if (!averia.get()) {
-
-            bloqueada = false;
-
-            publicar(
-                    "ACTIVADA#" + idAdministracion
-                    + "#" + idEstacion
-            );
-
-        } else {
-
-            System.out.println(
-                    "[RIEGO] No se puede activar: existe una fuga."
-            );
+    public synchronized void activar(String idAdministracion) {
+        if (averia.get()) {
+            System.out.println("[ENGINE] No se puede activar durante una fuga.");
+            return;
         }
+        bloqueada = false;
+        publicar("ACTIVADA#" + idAdministracion + "#" + idEstacion);
+    }
+
+    @Override
+    public void close() {
+        solicitarParada("MANUAL");
+        Thread hilo = hiloRiegoActual;
+        if (hilo != null && hilo != Thread.currentThread()) {
+            try { hilo.join(2500); }
+            catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        }
+        productor.close();
     }
 }

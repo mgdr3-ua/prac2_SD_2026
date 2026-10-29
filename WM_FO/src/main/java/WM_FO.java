@@ -31,6 +31,10 @@ public class WM_FO {
     private final ConcurrentHashMap<String, CompletableFuture<String>>
             pendientes = new ConcurrentHashMap<>();
 
+    // Respuestas a las consultas de disponibilidad.
+    private final ConcurrentHashMap<String, CompletableFuture<String>> consultas =
+            new ConcurrentHashMap<>();
+
     private final CountDownLatch consumidorPreparado =
             new CountDownLatch(1);
 
@@ -110,6 +114,12 @@ public class WM_FO {
                                 "[FO] Notificacion: " + registro.value()
                         );
 
+                        if (tipo.equals("LISTADO")) {
+                            CompletableFuture<String> consulta = consultas.remove(idSolicitud);
+                            if (consulta != null) consulta.complete(campos[3]);
+                            continue;
+                        }
+
                         // Una solicitud acaba cuando termina o es rechazada
                         if (tipo.equals("FINALIZADA")
                                 || tipo.equals("RECHAZADA")) {
@@ -179,6 +189,20 @@ public class WM_FO {
         return resultado;
     }
 
+    // CONSULTAR#id#operario -> LISTADO#id#operario#estaciones disponibles
+    public void consultarEstaciones() throws Exception {
+        String consultaId = "CON-" + UUID.randomUUID().toString().substring(0, 8);
+        CompletableFuture<String> respuesta = new CompletableFuture<>();
+        consultas.put(consultaId, respuesta);
+        try {
+            productor.send(new ProducerRecord<>("solicitudes-riego", idOperario,
+                    "CONSULTAR#" + consultaId + "#" + idOperario)).get(10, TimeUnit.SECONDS);
+            System.out.println("[FO] Estaciones disponibles: " + respuesta.get(20, TimeUnit.SECONDS));
+        } finally {
+            consultas.remove(consultaId);
+        }
+    }
+
     // Ejecutamos las solicitudes de un fichero secuencialmente
     public void ejecutarFichero(String nombreFichero) throws Exception {
 
@@ -186,7 +210,8 @@ public class WM_FO {
                 Path.of(nombreFichero)
         );
 
-        for (String linea : lineas) {
+        for (int indice = 0; indice < lineas.size(); indice++) {
+            String linea = lineas.get(indice);
 
             linea = linea.trim();
 
@@ -219,16 +244,15 @@ public class WM_FO {
                     );
 
                 } catch (java.util.concurrent.TimeoutException e) {
-                    System.out.println(
-                            "[FO] Tiempo de espera agotado para " + estacion
-                    );
+                    System.out.println("[FO] Tiempo de espera agotado para " + estacion);
+                    resultado.cancel(false);
                 }
-
-                // El enunciado exige 4 segundos entre servicios
-                System.out.println(
-                        "[FO] Esperando 4 segundos..."
-                );
-                Thread.sleep(4000);
+                // Solo esperar cuando quede otra solicitud valida por procesar.
+                if (lineas.subList(indice + 1, lineas.size()).stream()
+                        .anyMatch(s -> !s.isBlank() && !s.trim().startsWith("#"))) {
+                    System.out.println("[FO] Esperando 4 segundos...");
+                    Thread.sleep(4000);
+                }
 
             } catch (NumberFormatException e) {
                 System.out.println(
@@ -249,6 +273,7 @@ public class WM_FO {
             System.out.println("\n=== WM_FO ===");
             System.out.println("1. Solicitar riego");
             System.out.println("2. Leer solicitudes de fichero");
+            System.out.println("3. Consultar estaciones disponibles");
             System.out.println("0. Salir");
             System.out.print("Opcion: ");
 
@@ -276,6 +301,10 @@ public class WM_FO {
                         String fichero = teclado.nextLine().trim();
 
                         ejecutarFichero(fichero);
+                        break;
+
+                    case "3":
+                        consultarEstaciones();
                         break;
 
                     case "0":
@@ -313,7 +342,7 @@ public class WM_FO {
         try {
             // Evitamos enviar solicitudes antes de que Kafka escuche
             if (!operario.consumidorPreparado.await(
-                    50, TimeUnit.SECONDS)) {
+                    90, TimeUnit.SECONDS)) {
                 System.out.println(
                         "[FO] No se pudo preparar el consumidor Kafka."
                 );

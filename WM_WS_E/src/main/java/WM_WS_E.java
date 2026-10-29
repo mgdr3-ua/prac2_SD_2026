@@ -1,174 +1,93 @@
-
-import java.net.Socket;
-import java.io.IOException;
-import java.io.DataOutputStream;
 import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.net.Socket;
 import java.util.Scanner;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class WM_WS_E {
-
     public static void main(String[] args) {
+        // Por compatibilidad: sin argumentos funciona en la prueba local antigua.
+        if (args.length != 0 && args.length != 3) {
+            System.out.println("Uso: WM_WS_E <broker:puerto> <ip_monitor> <puerto_monitor>");
+            return;
+        }
+        String broker = args.length == 3 ? args[0] : "localhost:9092";
+        String ipMonitor = args.length == 3 ? args[1] : "localhost";
+        int puertoMonitor;
+        try {
+            puertoMonitor = args.length == 3 ? Integer.parseInt(args[2]) : 5001;
+        } catch (NumberFormatException e) {
+            System.err.println("Puerto de monitor incorrecto.");
+            return;
+        }
 
-        System.out.println(" --- WATER MANAGER --- ");
-        System.out.println("MODULO: Engine de estacion (WM_WS_E)");
-
-        // Configuracion de Kafka y de la estacion
-        String brokerKafka = "localhost:9092";
-        String idEstacion = "WS-01";
-
-        // Datos de conexion del monitor
-        String ipMonitor = "localhost";
-        int puertoMonitor = 5001;
-
-        // Variable compartida para detectar averias
-        AtomicBoolean averia = new AtomicBoolean(false);
-
-        // Creamos el motor encargado del riego
-        MotorRiego motor = new MotorRiego(
-                brokerKafka,
-                idEstacion,
-                averia
-        );
-
-        // Iniciamos el consumidor Kafka en otro hilo
-        Thread hiloKafka = new Thread(
-                new ConsumidorKafka(
-                        brokerKafka,
-                        idEstacion,
-                        motor
-                )
-        );
-
-        hiloKafka.setName("Kafka-Consumer-" + idEstacion);
-        hiloKafka.setDaemon(true);
-        hiloKafka.start();
-
-        System.out.println("Hilo consumidor Kafka iniciado.");
-
-        // Conexion TCP con el monitor
         try (Socket socket = new Socket(ipMonitor, puertoMonitor)) {
+            DataInputStream entrada = new DataInputStream(socket.getInputStream());
+            DataOutputStream salida = new DataOutputStream(socket.getOutputStream());
+            socket.setSoTimeout(5000);
 
-            System.out.println(
-                    "Conexion establecida con WM_WS_M."
-            );
+            // La identidad de la estacion procede del Monitor ya registrado en CENTRAL.
+            String bienvenida = entrada.readUTF();
+            if (!bienvenida.startsWith("ID#") || bienvenida.substring(3).isBlank()) {
+                throw new IOException("El monitor no ha enviado el ID de estacion.");
+            }
+            String idEstacion = bienvenida.substring(3);
+            System.out.println("[ENGINE] Estacion " + idEstacion + " | Kafka " + broker);
 
-            System.out.println(
-                    "Monitor: " + ipMonitor + ":" + puertoMonitor
-            );
+            AtomicBoolean averia = new AtomicBoolean(false);
+            try (MotorRiego motor = new MotorRiego(broker, idEstacion, averia)) {
+                Thread consumidor = new Thread(new ConsumidorKafka(broker, idEstacion, motor),
+                        "Kafka-Consumer-" + idEstacion);
+                consumidor.setDaemon(true);
+                consumidor.start();
 
-            // Flujos de comunicacion TCP
-            DataInputStream entrada =
-                    new DataInputStream(socket.getInputStream());
-
-            DataOutputStream salida =
-                    new DataOutputStream(socket.getOutputStream());
-
-            // Hilo para leer las teclas del usuario
-            Thread teclado = new Thread(() -> {
-
-                Scanner scanner = new Scanner(System.in);
-
-                System.out.println(
-                        "Pulsa F + Enter para simular una fuga."
-                );
-
-                System.out.println(
-                        "Pulsa R + Enter para resolver la fuga."
-                );
-
-                System.out.println(
-                        "Pulsa P + Enter para parar el riego."
-                );
-
-                while (scanner.hasNextLine()) {
-
-                    String opcion = scanner.nextLine();
-
-                    if (opcion.equalsIgnoreCase("F")) {
-
-                        // Activamos la simulacion de fuga
-                        averia.set(true);
-
-                        System.out.println(
-                                "AVERIA SIMULADA: Fuga detectada."
-                        );
-
-                    } else if (opcion.equalsIgnoreCase("R")) {
-
-                        // Resolvemos la fuga
-                        averia.set(false);
-
-                        System.out.println(
-                                "RECUPERACION: Fuga resuelta."
-                        );
-
-                    } else if (opcion.equalsIgnoreCase("P")) {
-
-                        // Paramos el riego actual
-                        motor.pararActual();
-
-                    } else {
-
-                        System.out.println(
-                                "Opcion desconocida. Usa F, R o P."
-                        );
+                Thread teclado = new Thread(() -> {
+                    Scanner scanner = new Scanner(System.in);
+                    System.out.println("F: fuga | R: resolver fuga | P: parar riego | I: solicitar riego local");
+                    while (scanner.hasNextLine()) {
+                        String opcion = scanner.nextLine().trim().toUpperCase();
+                        try {
+                            switch (opcion) {
+                                case "F" -> {
+                                    motor.notificarFuga();
+                                    System.out.println("[ENGINE] Fuga simulada. Avisando al monitor.");
+                                }
+                                case "R" -> {
+                                    averia.set(false);
+                                    System.out.println("[ENGINE] Fuga resuelta.");
+                                }
+                                case "P" -> motor.pararActual();
+                                case "I" -> {
+                                    System.out.print("ID de operario registrado: ");
+                                    String op = scanner.nextLine().trim();
+                                    System.out.print("Duracion (segundos): ");
+                                    int duracion = Integer.parseInt(scanner.nextLine().trim());
+                                    motor.solicitarRiego(op, duracion);
+                                }
+                                default -> System.out.println("Opciones: F, R, P, I");
+                            }
+                        } catch (Exception e) {
+                            System.err.println("[ENGINE] Entrada incorrecta: " + e.getMessage());
+                        }
                     }
-                }
-            });
+                }, "Teclado-" + idEstacion);
+                teclado.setDaemon(true);
+                teclado.start();
 
-            teclado.setDaemon(true);
-            teclado.start();
-
-            // Atendemos las comprobaciones del monitor
-            while (true) {
-
-                String mensaje = entrada.readUTF();
-
-                System.out.println(
-                        "Mensaje recibido del Monitor: " + mensaje
-                );
-
-                if (mensaje.equals("PING")) {
-
-                    if (averia.get()) {
-
-                        // En caso de fuga respondemos KO
-                        salida.writeUTF("KO");
+                // Socket TCP dedicado a salud; el riego usa otros hilos.
+                while (true) {
+                    String mensaje = entrada.readUTF();
+                    if ("PING".equals(mensaje)) {
+                        salida.writeUTF(averia.get() ? "KO" : "OK");
                         salida.flush();
-
-                        System.out.println(
-                                "Respuesta enviada: KO"
-                        );
-
                     } else {
-
-                        // Si funciona bien respondemos OK
-                        salida.writeUTF("OK");
-                        salida.flush();
-
-                        System.out.println(
-                                "Respuesta enviada: OK"
-                        );
+                        System.err.println("[ENGINE] Mensaje del monitor desconocido: " + mensaje);
                     }
-
-                } else {
-
-                    System.out.println(
-                            "Mensaje desconocido: " + mensaje
-                    );
                 }
             }
-
         } catch (IOException e) {
-
-            System.out.println(
-                    "ERROR: comunicacion con WM_WS_M."
-            );
-
-            System.out.println(
-                    "Motivo: " + e.getMessage()
-            );
+            System.err.println("[ENGINE] Conexion con monitor perdida: " + e.getMessage());
         }
     }
 }
