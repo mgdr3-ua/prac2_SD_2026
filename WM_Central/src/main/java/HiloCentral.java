@@ -1,0 +1,247 @@
+import java.net.Socket;
+import java.io.DataInputStream;
+import java.io.IOException;
+import java.io.DataOutputStream;
+import java.sql.SQLException;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+
+public class HiloCentral extends Thread {
+
+    private Socket cliente;
+    private final String kafka;
+
+    public HiloCentral(Socket cliente, String kafka) {
+        this.cliente = cliente;
+        this.kafka = kafka;
+    }
+
+@Override
+public void run() {
+
+    try {
+        // Mostramos qué cliente está siendo atendido
+        System.out.println("Hilo iniciado para el cliente: " + cliente.getInetAddress() + ":" + cliente.getPort());
+
+        // Creamos el flujo para recibir datos del cliente
+        DataInputStream entrada = new DataInputStream(cliente.getInputStream());
+
+        // Creamos el flujo para enviar respuestas al cliente
+        DataOutputStream salida = new DataOutputStream(cliente.getOutputStream());
+
+        // Esperamos a recibir un mensaje de la estación
+        String mensaje = entrada.readUTF();
+
+        // Mostramos el mensaje recibido
+        System.out.println("Mensaje recibido: " + mensaje);
+
+        // Separamos el mensaje utilizando # como delimitador
+        String[] campos = mensaje.split("#", -1);
+
+        // Comprobamos que el mensaje tenga exactamente 3 campos
+        if (campos.length == 3) {
+            // Extraemos el tipo de mensaje, el ID y la ubicación
+            String tipo = campos[0];
+            String idEstacion = campos[1];
+            String ubicacion = campos[2];
+
+            // Mostramos los datos obtenidos
+            System.out.println("Tipo de mensaje: " + tipo);
+            System.out.println("ID de estacion: " + idEstacion);
+            System.out.println("Ubicacion: " + ubicacion);
+
+           if (tipo.equals("REGISTRO") && !idEstacion.trim().isEmpty() && !ubicacion.trim().isEmpty()) {
+
+                // Guardamos la estación en SQLite.
+                 try {
+                    BaseDatos.guardarEstacion(idEstacion, ubicacion);
+
+                    // Solo confirmamos el registro si SQLite funciona.
+                    salida.writeUTF("STATUS#OK#Estacion registrada correctamente");
+                    salida.flush();
+
+                    } catch (SQLException e) {
+
+                        // Si falla la base de datos, avisamos al cliente.
+                        System.err.println("Error al guardar la estacion: " + e.getMessage());
+
+                        salida.writeUTF("STATUS#ERROR#No se pudo guardar la estacion");
+                        salida.flush();
+                    }
+            
+            } else if (tipo.equals("ESTADO")) {
+
+                // En este mensaje, el segundo campo es el ID
+                // y el tercero indica el nuevo estado de la estación.
+                String nuevoEstado = ubicacion;
+
+               // Comprobamos que el ID no esté vacío y que el estado sea válido.
+                if (!idEstacion.trim().isEmpty() && (nuevoEstado.equals("DISPONIBLE") || nuevoEstado.equals("REGANDO") || nuevoEstado.equals("FUGA") || nuevoEstado.equals("FUERA_SERVICIO") || nuevoEstado.equals("DESCONECTADA"))) { 
+
+                    try {
+                        // Comprobación: no permitir iniciar un riego si la estación no está disponible.
+                        if (nuevoEstado.equals("REGANDO") && !BaseDatos.estacionDisponible(idEstacion)) {
+
+                            salida.writeUTF("STATUS#ERROR#La estacion no esta disponible para regar");
+                            salida.flush();
+                            return;
+                        }
+                        // Intentamos actualizar la estación en SQLite.
+                        boolean actualizada = BaseDatos.actualizarEstado(idEstacion, nuevoEstado);
+
+                        if (actualizada) {
+                            salida.writeUTF("STATUS#OK#Estado actualizado correctamente");
+                        } else {
+                            salida.writeUTF("STATUS#ERROR#No se puede actualizar el estado de la estacion");
+                        }
+
+                    } catch (SQLException e) {
+
+                        // Informamos del error si falla SQLite.
+                        System.err.println("Error al actualizar el estado: " + e.getMessage());
+                        salida.writeUTF("STATUS#ERROR#No se pudo actualizar el estado");
+                    }
+
+                } else {
+
+                    // Rechazamos identificadores vacíos y estados desconocidos.
+                    salida.writeUTF("STATUS#ERROR#Datos de estado no validos");
+                }
+
+                salida.flush();
+           
+            } else if (tipo.equals("AVERIA")) {
+
+                // El monitor informa de una fuga o de su resolución.
+                String tipoAveria = ubicacion;
+
+                // Comprobamos que el ID y el tipo de avería sean válidos.
+                if (idEstacion.trim().isEmpty() || (!tipoAveria.equals("FUGA") && !tipoAveria.equals("RESUELTA"))) {
+                    salida.writeUTF("STATUS#ERROR#Datos de averia no validos");
+                } else {
+                       
+                    try {
+                        // Si hay una fuga, cambiamos el estado a FUGA.
+                        // Si se ha resuelto, volvemos a DISPONIBLE.
+                        // Procesamos la fuga o su resolución.
+                        boolean actualizada;
+
+                        if (tipoAveria.equals("FUGA")) {
+
+                            // Registramos la fuga en SQLite.
+                            actualizada = BaseDatos.actualizarEstado(idEstacion, "FUGA");
+
+                        } else {
+
+                            // Solo resolvemos la avería si la estación estaba en FUGA.
+                            actualizada = BaseDatos.resolverAveria(idEstacion);
+                        }
+
+                        if (actualizada) {
+
+                            System.out.println("Estacion " + idEstacion + " - Averia: " + tipoAveria);                            
+                            salida.writeUTF("STATUS#OK#Averia procesada correctamente");
+
+                        } else {
+                            salida.writeUTF("STATUS#ERROR#Estacion no registrada");
+                        }
+
+                    } catch (SQLException e) {
+
+                        System.err.println("Error al procesar averia: " + e.getMessage());
+                        salida.writeUTF("STATUS#ERROR#No se pudo procesar la averia");
+                    }
+                }
+                salida.flush();
+
+                if ("FUGA".equals(tipoAveria)) {
+                    // No esperar al watchdog cuando el monitor detecta una fuga.
+                    // Enviar el resumen mas reciente al operario una sola vez.
+                    Thread aviso = new Thread(() -> {
+                        SolicitudesActivas.Expirada activa = SolicitudesActivas.extraerPorEstacion(idEstacion);
+                        if (activa == null) return;
+                        try (ProductorKafka productor = new ProductorKafka(kafka)) {
+                            if (activa.iniciada()) {
+                                BaseDatos.DatosRiego datos = BaseDatos.obtenerDatosRiego(idEstacion);
+                                String finalizada = String.format(java.util.Locale.US,
+                                    "FINALIZADA#%s#%s#%s#FUGA#%d#%.2f",
+                                    activa.idSolicitud(), activa.idOperario(), idEstacion,
+                                    datos.segundos(), datos.volumen());
+                                productor.notificarOperario(activa.idOperario(), finalizada);
+                            } else {
+                                productor.notificarOperario(activa.idOperario(),
+                                    "RECHAZADA#" + activa.idSolicitud() + "#" + activa.idOperario()
+                                    + "#" + idEstacion + "#FUGA");
+                            }
+                            productor.enviarOrdenEstacion(idEstacion,
+                                    "PARAR#" + activa.idSolicitud() + "#" + idEstacion);
+                            BaseDatos.eliminarDatosRiego(idEstacion);
+                        } catch (Exception e) {
+                            System.err.println("[CENTRAL] Error notificando fuga: " + e.getMessage());
+                        }
+                    }, "Aviso-fuga-" + idEstacion);
+                    aviso.setDaemon(true);
+                    aviso.start();
+                }
+
+            } else if (tipo.equals("SOLICITUD_RIEGO")) {
+                 // El tercero identifica al operario que solicita el riego.
+                String idOperario = ubicacion;
+
+                if (idEstacion.trim().isEmpty() || idOperario.trim().isEmpty()) {
+                    salida.writeUTF("STATUS#ERROR#Datos de solicitud no validos");
+                } else {
+                    try {
+                        // Primero comprobamos que el operario esté registrado.
+                        if (!BaseDatos.operarioRegistrado(idOperario)) {
+                            salida.writeUTF("STATUS#ERROR#Operario no registrado");
+                        } else {
+                            // Si está registrado, comprobamos la disponibilidad de la estación.
+                            boolean disponible = BaseDatos.estacionDisponible(idEstacion);
+
+                            if (disponible) {
+                                salida.writeUTF("STATUS#OK#Estacion disponible");
+                            } else {
+                                salida.writeUTF("STATUS#ERROR#Estacion no disponible");
+                            }
+                        }
+                    } catch (SQLException e) {
+                        System.err.println("Error al consultar la solicitud de riego: " + e.getMessage());
+                        salida.writeUTF("STATUS#ERROR#No se pudo consultar la solicitud de riego");
+                    }
+                }
+                salida.flush();
+            
+            } else {
+
+                // El registro contiene datos incorrectos
+                System.out.println("ERROR: datos de registro no validos.");
+
+                // Informamos al cliente de que el registro ha fallado
+                salida.writeUTF("STATUS#ERROR#Datos de registro no validos");
+                salida.flush();
+            }   
+        
+        } else {
+             // El mensaje no contiene los tres campos esperados
+            System.out.println("ERROR: formato de mensaje incorrecto.");
+
+            // Informamos al cliente del error de formato
+            salida.writeUTF("STATUS#ERROR#Formato de mensaje incorrecto");
+            salida.flush();
+        }
+
+        } catch (IOException e) {
+        // Controlamos posibles errores de comunicación
+        System.out.println("Error al recibir datos del cliente: " + e.getMessage());
+
+    } finally {
+        try {
+            // Cerramos la conexión cuando termina el hilo
+            cliente.close();
+        } catch (IOException e) {
+            System.out.println("Error al cerrar la conexion con el cliente.");
+        }
+    }
+}
+}

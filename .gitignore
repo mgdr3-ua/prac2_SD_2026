@@ -1,2 +1,17 @@
+
 # Archivos compilados de Java
 *.class
+**/target/
+
+# Bases de datos locales
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# Archivos del editor
+.vscode/
+.idea/
+
+# Logs
+*.log
