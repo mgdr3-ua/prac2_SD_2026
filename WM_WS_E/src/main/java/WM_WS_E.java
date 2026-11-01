@@ -1,3 +1,4 @@
+
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -5,13 +6,35 @@ import java.net.Socket;
 import java.util.Scanner;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+/**
+ * Implementa el Engine de una estación de riego de WaterManagement.
+ *
+ * Establece una conexión TCP con el Monitor para identificarse y responder
+ * a las comprobaciones periódicas de estado mediante mensajes PING.
+ * Además, utiliza MotorRiego para ejecutar las operaciones de riego y
+ * ConsumidorKafka para recibir órdenes a través de Kafka.
+ *
+ * Emplea hilos independientes para el consumidor Kafka y la entrada
+ * por teclado, permitiendo atender estas operaciones simultáneamente
+ * sin interrumpir la comunicación de supervisión con el Monitor.
+ */
 public class WM_WS_E {
+
+    /**
+     * Punto de entrada del Engine.
+     *
+     * Configura la conexión con Kafka y el Monitor, obtiene el identificador
+     * de la estación y pone en marcha los hilos necesarios para recibir
+     * órdenes y gestionar las operaciones manuales.
+     */
     public static void main(String[] args) {
         // Por compatibilidad: sin argumentos funciona en la prueba local antigua.
         if (args.length != 0 && args.length != 3) {
             System.out.println("Uso: WM_WS_E <broker:puerto> <ip_monitor> <puerto_monitor>");
             return;
         }
+
+        // Configuración de los destinos de comunicación según los argumentos recibidos.
         String broker = args.length == 3 ? args[0] : "localhost:9092";
         String ipMonitor = args.length == 3 ? args[1] : "localhost";
         int puertoMonitor;
@@ -22,6 +45,7 @@ public class WM_WS_E {
             return;
         }
 
+        // Conexión TCP persistente con el Monitor para la supervisión del Engine.
         try (Socket socket = new Socket(ipMonitor, puertoMonitor)) {
             DataInputStream entrada = new DataInputStream(socket.getInputStream());
             DataOutputStream salida = new DataOutputStream(socket.getOutputStream());
@@ -35,13 +59,17 @@ public class WM_WS_E {
             String idEstacion = bienvenida.substring(3);
             System.out.println("[ENGINE] Estacion " + idEstacion + " | Kafka " + broker);
 
+            // Estado de avería compartido entre los hilos de ejecución.
             AtomicBoolean averia = new AtomicBoolean(false);
             try (MotorRiego motor = new MotorRiego(broker, idEstacion, averia)) {
+
+                // Hilo independiente que consume las órdenes recibidas desde Kafka.
                 Thread consumidor = new Thread(new ConsumidorKafka(broker, idEstacion, motor),
                         "Kafka-Consumer-" + idEstacion);
                 consumidor.setDaemon(true);
                 consumidor.start();
 
+                // Hilo dedicado a leer comandos manuales sin bloquear la supervisión TCP.
                 Thread teclado = new Thread(() -> {
                     Scanner scanner = new Scanner(System.in);
                     System.out.println("F: fuga | R: resolver fuga | P: parar riego | I: solicitar riego local");
@@ -49,15 +77,23 @@ public class WM_WS_E {
                         String opcion = scanner.nextLine().trim().toUpperCase();
                         try {
                             switch (opcion) {
+
+                                // Simula una fuga y solicita la interrupción del riego.
                                 case "F" -> {
                                     motor.notificarFuga();
                                     System.out.println("[ENGINE] Fuga simulada. Avisando al monitor.");
                                 }
+
+                                // Elimina el estado de avería para recuperar la estación.
                                 case "R" -> {
                                     averia.set(false);
                                     System.out.println("[ENGINE] Fuga resuelta.");
                                 }
+
+                                // Solicita la parada manual del riego activo.
                                 case "P" -> motor.pararActual();
+
+                                // Envía una solicitud de riego que deberá autorizar CENTRAL.
                                 case "I" -> {
                                     System.out.print("ID de operario registrado: ");
                                     String op = scanner.nextLine().trim();
@@ -79,6 +115,8 @@ public class WM_WS_E {
                 while (true) {
                     String mensaje = entrada.readUTF();
                     if ("PING".equals(mensaje)) {
+
+                        // Responde OK si funciona correctamente o KO si existe una fuga.
                         salida.writeUTF(averia.get() ? "KO" : "OK");
                         salida.flush();
                     } else {
@@ -87,6 +125,8 @@ public class WM_WS_E {
                 }
             }
         } catch (IOException e) {
+
+            // Informa de la pérdida de comunicación con el Monitor.
             System.err.println("[ENGINE] Conexion con monitor perdida: " + e.getMessage());
         }
     }
