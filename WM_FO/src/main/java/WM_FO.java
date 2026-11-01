@@ -20,6 +20,14 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 
+/**
+ * Implementa el módulo FO (Field Operator) de WaterManagement.
+ * Permite a los operarios solicitar riegos, consultar las estaciones
+ * disponibles y procesar solicitudes almacenadas en ficheros.
+ *
+ * Utiliza Kafka para comunicarse de forma asíncrona con CENTRAL,
+ * enviando peticiones y recibiendo notificaciones de su resultado.
+ */
 public class WM_FO {
 
     private final String broker;
@@ -28,6 +36,7 @@ public class WM_FO {
     private final KafkaProducer<String, String> productor;
 
     // Guardamos las solicitudes pendientes de terminar
+    // Cada identificador se asocia a un CompletableFuture que recibirá el resultado.
     private final ConcurrentHashMap<String, CompletableFuture<String>>
             pendientes = new ConcurrentHashMap<>();
 
@@ -35,9 +44,13 @@ public class WM_FO {
     private final ConcurrentHashMap<String, CompletableFuture<String>> consultas =
             new ConcurrentHashMap<>();
 
+    // Permite esperar a que el consumidor Kafka tenga particiones asignadas.
     private final CountDownLatch consumidorPreparado =
             new CountDownLatch(1);
 
+    /**
+     * Inicializa el operario y configura su productor Kafka.
+     */
     public WM_FO(String broker, String idOperario) {
 
         this.broker = broker;
@@ -55,6 +68,16 @@ public class WM_FO {
     }
 
     // Escuchamos las notificaciones dirigidas a este operario
+
+    /**
+     * Inicia un hilo independiente para recibir notificaciones de Kafka.
+     * El consumidor escucha el tópico notificaciones-operarios,
+     * filtra los mensajes según el identificador del operario
+     * y completa las solicitudes o consultas pendientes.
+     *
+     * Los offsets se confirman manualmente después de procesar
+     * los mensajes recibidos.
+     */
     public void escucharNotificaciones() {
 
         Thread hilo = new Thread(() -> {
@@ -96,6 +119,7 @@ public class WM_FO {
 
                     for (ConsumerRecord<String, String> registro : mensajes) {
 
+                        // Los mensajes utilizan campos separados mediante '#'.
                         String[] campos = registro.value().split("#", -1);
 
                         // Formato: TIPO#SOLICITUD#OPERARIO#ESTACION...
@@ -103,6 +127,7 @@ public class WM_FO {
                             continue;
                         }
 
+                        // Se descartan las notificaciones destinadas a otros operarios.
                         if (!campos[2].equals(idOperario)) {
                             continue;
                         }
@@ -114,6 +139,7 @@ public class WM_FO {
                                 "[FO] Notificacion: " + registro.value()
                         );
 
+                        // Completa la consulta de disponibilidad correspondiente.
                         if (tipo.equals("LISTADO")) {
                             CompletableFuture<String> consulta = consultas.remove(idSolicitud);
                             if (consulta != null) consulta.complete(campos[3]);
@@ -133,6 +159,7 @@ public class WM_FO {
                         }
                     }
 
+                    // Confirma los offsets una vez procesado el lote de mensajes.
                     if (!mensajes.isEmpty()) {
                         consumidor.commitSync();
                     }
@@ -146,12 +173,19 @@ public class WM_FO {
             }
         });
 
+        // El hilo de notificaciones no impide la finalización del programa.
         hilo.setDaemon(true);
         hilo.setName("Notificaciones-" + idOperario);
         hilo.start();
     }
 
     // Solicitamos un riego a CENTRAL a traves de Kafka
+
+    /**
+     * Envía una solicitud de riego a CENTRAL mediante Kafka.
+     * Genera un identificador único y registra un CompletableFuture
+     * para asociar la futura notificación con la solicitud enviada.
+     */
     public CompletableFuture<String> solicitarRiego(
             String idEstacion, int duracion) throws Exception {
 
@@ -182,6 +216,7 @@ public class WM_FO {
             System.out.println("[FO] Solicitud enviada: " + mensaje);
 
         } catch (Exception e) {
+            // Si falla el envío, se elimina la solicitud pendiente.
             pendientes.remove(idSolicitud);
             throw e;
         }
@@ -190,6 +225,12 @@ public class WM_FO {
     }
 
     // CONSULTAR#id#operario -> LISTADO#id#operario#estaciones disponibles
+
+    /**
+     * Consulta las estaciones disponibles a través de CENTRAL.
+     * Publica una petición CONSULTAR en Kafka y espera hasta
+     * 20 segundos para recibir la respuesta LISTADO correspondiente.
+     */
     public void consultarEstaciones() throws Exception {
         String consultaId = "CON-" + UUID.randomUUID().toString().substring(0, 8);
         CompletableFuture<String> respuesta = new CompletableFuture<>();
@@ -199,11 +240,23 @@ public class WM_FO {
                     "CONSULTAR#" + consultaId + "#" + idOperario)).get(10, TimeUnit.SECONDS);
             System.out.println("[FO] Estaciones disponibles: " + respuesta.get(20, TimeUnit.SECONDS));
         } finally {
+            // La consulta se retira tanto si finaliza como si produce un error.
             consultas.remove(consultaId);
         }
     }
 
     // Ejecutamos las solicitudes de un fichero secuencialmente
+
+    /**
+     * Lee y ejecuta las solicitudes de riego contenidas en un fichero.
+     * Cada línea válida contiene el identificador de estación y la
+     * duración, separados mediante '#'. Se ignoran las líneas vacías
+     * y los comentarios.
+     *
+     * Las solicitudes se procesan secuencialmente, esperando su resultado
+     * antes de continuar y aplicando una pausa de cuatro segundos
+     * cuando quedan más solicitudes por procesar.
+     */
     public void ejecutarFichero(String nombreFichero) throws Exception {
 
         List<String> lineas = Files.readAllLines(
@@ -244,6 +297,7 @@ public class WM_FO {
                     );
 
                 } catch (java.util.concurrent.TimeoutException e) {
+                    // Se cancela la espera local si no llega respuesta a tiempo.
                     System.out.println("[FO] Tiempo de espera agotado para " + estacion);
                     resultado.cancel(false);
                 }
@@ -264,6 +318,11 @@ public class WM_FO {
         System.out.println("[FO] Fichero procesado.");
     }
 
+    /**
+     * Muestra el menú interactivo del operario.
+     * Permite solicitar riegos, procesar un fichero de solicitudes,
+     * consultar estaciones disponibles o finalizar la aplicación.
+     */
     public void menu() {
 
         Scanner teclado = new Scanner(System.in);
@@ -308,6 +367,7 @@ public class WM_FO {
                         break;
 
                     case "0":
+                        // Libera el productor Kafka antes de salir del menú.
                         productor.close();
                         return;
 
@@ -323,6 +383,11 @@ public class WM_FO {
         }
     }
 
+    /**
+     * Punto de entrada de la aplicación FO.
+     * Comprueba los argumentos, inicia el consumidor de notificaciones
+     * y espera a que esté preparado antes de mostrar el menú.
+     */
     public static void main(String[] args) {
 
         if (args.length != 2) {
@@ -357,6 +422,7 @@ public class WM_FO {
             operario.menu();
 
         } catch (InterruptedException e) {
+            // Conserva el estado de interrupción y libera el productor.
             Thread.currentThread().interrupt();
             operario.productor.close();
         }
