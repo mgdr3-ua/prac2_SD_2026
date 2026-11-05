@@ -77,7 +77,7 @@ services:
   monitor-ws01:
     image: wm-monitor:local
     build:
-      context: ./WM_WS_M
+      context: ./WM_WS/WM_WS_M
     depends_on:
       central:
         condition: service_started
@@ -89,7 +89,7 @@ services:
   engine-ws01:
     image: wm-engine:local
     build:
-      context: ./WM_WS_E
+      context: ./WM_WS/WM_WS_E
     depends_on:
       monitor-ws01:
         condition: service_started
